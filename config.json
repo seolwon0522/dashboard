@@ -7,7 +7,7 @@
     "page_size": 100
   },
   "dashboard": {
-    "default_project": "bp-cloudpos-docs",
+    "default_project": "bp-cloudpos",
     "include_subprojects": false,
     "cache_ttl_seconds": 300,
     "status_groups": {

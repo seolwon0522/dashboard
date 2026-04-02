@@ -1,0 +1,9 @@
+/* Tailwind CSS 기본 지시어 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 전체 배경색 설정 */
+body {
+  background-color: #f3f4f6;
+}
