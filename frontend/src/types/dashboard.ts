@@ -31,6 +31,7 @@ export interface OverdueIssue {
   status: string
   priority: string | null
   days_overdue: number
+  url: string
 }
 
 export interface OverdueIssuesResponse {

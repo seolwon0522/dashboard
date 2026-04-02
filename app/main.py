@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.requests import Request
+from fastapi.responses import JSONResponse
 
 from app.api.v1.router import router as v1_router
 from app.client.redmine_client import RedmineClient
@@ -73,6 +75,28 @@ app.add_middleware(
 
 # v1 API 라우터 등록
 app.include_router(v1_router)
+
+
+# ── Redmine API 관련 글로벌 예외 핸들러 ──
+
+@app.exception_handler(httpx.HTTPStatusError)
+async def redmine_http_error_handler(request: Request, exc: httpx.HTTPStatusError):
+    """Redmine API가 4xx/5xx 응답을 반환한 경우 502로 변환"""
+    logger.error("Redmine API 오류: %s %s", exc.response.status_code, exc.request.url)
+    return JSONResponse(
+        status_code=502,
+        content={"detail": f"Redmine 서버 오류 ({exc.response.status_code})"},
+    )
+
+
+@app.exception_handler(httpx.ConnectError)
+async def redmine_connect_error_handler(request: Request, exc: httpx.ConnectError):
+    """Redmine 서버 연결 실패 시 502 반환"""
+    logger.error("Redmine 연결 실패: %s", exc)
+    return JSONResponse(
+        status_code=502,
+        content={"detail": "Redmine 서버에 연결할 수 없습니다"},
+    )
 
 
 @app.get("/health", tags=["system"])

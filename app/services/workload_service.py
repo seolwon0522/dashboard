@@ -8,6 +8,7 @@ from datetime import date, datetime
 from app.client.redmine_client import RedmineClient
 from app.core.cache import TTLCache
 from app.core.config import Settings
+from app.services.utils import calc_overdue
 
 
 class WorkloadService:
@@ -21,72 +22,59 @@ class WorkloadService:
     async def get_workload(self, project_id: str | None = None) -> dict:
         """담당자별 open 이슈 수 + overdue 이슈 수 반환"""
         pid = project_id or self._settings.dashboard.default_project
-        cache_key = f"workload:{pid}"
 
-        async def _factory():
-            # 해당 프로젝트의 전체 이슈 조회
-            all_issues = await self._client.fetch_all_issues({
-                "project_id": pid,
-                "status_id": "*",
-            })
+        # 공유 캐시(issues:{pid})를 재사용하여 중복 조회 방지
+        all_issues = await self._fetch_project_issues(pid)
 
-            today = date.today()
-            closed_ids = self._settings.get_excluded_status_ids(("closed",))
-            overdue_exclude = self._settings.get_excluded_status_ids(
-                self._settings.dashboard.overdue_rule.exclude_status_groups
-            )
-
-            # 담당자별 집계 구조: {user_id: {"name": str, "open": int, "overdue": int}}
-            workload: dict[int | None, dict] = defaultdict(
-                lambda: {"name": "미할당", "open": 0, "overdue": 0}
-            )
-
-            for issue in all_issues:
-                status_id = issue.get("status", {}).get("id")
-
-                # closed 그룹 이슈는 워크로드에서 제외
-                if status_id in closed_ids:
-                    continue
-
-                assigned = issue.get("assigned_to")
-                user_id = assigned.get("id") if assigned else None
-                user_name = assigned.get("name") if assigned else "미할당"
-
-                entry = workload[user_id]
-                entry["name"] = user_name
-                entry["open"] += 1
-
-                # 기한 초과 여부 확인
-                due_str = issue.get("due_date")
-                if due_str and status_id not in overdue_exclude:
-                    if date.fromisoformat(due_str) < today:
-                        entry["overdue"] += 1
-
-            # 정렬: open 이슈 수 기준 내림차순
-            result = []
-            for user_id, data in sorted(
-                workload.items(),
-                key=lambda x: x[1]["open"],
-                reverse=True,
-            ):
-                result.append({
-                    "user_id": user_id,
-                    "name": data["name"],
-                    "open_issues": data["open"],
-                    "overdue_issues": data["overdue"],
-                })
-
-            return result
-
-        workload = await self._cache.get_or_set(
-            cache_key,
-            _factory,
-            ttl=self._settings.dashboard.cache_ttl_seconds,
+        today = date.today()
+        closed_ids = self._settings.get_excluded_status_ids(("closed",))
+        overdue_exclude = self._settings.get_excluded_status_ids(
+            self._settings.dashboard.overdue_rule.exclude_status_groups
         )
+
+        # 담당자별 집계 구조: {user_id: {"name": str, "open": int, "overdue": int}}
+        workload: dict[int | None, dict] = defaultdict(
+            lambda: {"name": "미할당", "open": 0, "overdue": 0}
+        )
+
+        for issue in all_issues:
+            status_id = issue.get("status", {}).get("id")
+
+            # closed 그룹 이슈는 워크로드에서 제외
+            if status_id in closed_ids:
+                continue
+
+            assigned = issue.get("assigned_to")
+            user_id = assigned.get("id") if assigned else None
+            user_name = assigned.get("name") if assigned else "미할당"
+
+            entry = workload[user_id]
+            entry["name"] = user_name
+            entry["open"] += 1
+
+            # 기한 초과 여부 확인
+            if status_id not in overdue_exclude:
+                is_overdue, _ = calc_overdue(issue.get("due_date"), today)
+                if is_overdue:
+                    entry["overdue"] += 1
+
+        # 정렬: open 이슈 수 기준 내림차순
+        result = []
+        for user_id, data in sorted(
+            workload.items(),
+            key=lambda x: x[1]["open"],
+            reverse=True,
+        ):
+            result.append({
+                "user_id": user_id,
+                "name": data["name"],
+                "open_issues": data["open"],
+                "overdue_issues": data["overdue"],
+            })
 
         return {
             "project_id": pid,
-            "workload": workload,
+            "workload": result,
             "cached_at": datetime.now(),
         }
 
@@ -151,14 +139,9 @@ class WorkloadService:
 
             # 기한 초과 계산
             due_str = issue.get("due_date")
-            is_overdue = False
-            days_overdue = 0
-            if due_str:
-                due_date = date.fromisoformat(due_str)
-                if due_date < today:
-                    is_overdue = True
-                    days_overdue = (today - due_date).days
-                    overdue_count += 1
+            is_overdue, days_overdue = calc_overdue(due_str, today)
+            if is_overdue:
+                overdue_count += 1
 
             issues.append({
                 "id": issue["id"],

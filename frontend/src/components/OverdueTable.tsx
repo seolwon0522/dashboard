@@ -36,7 +36,15 @@ export default function OverdueTable({ issues }: Props) {
               <tr key={issue.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-gray-400">#{issue.id}</td>
                 <td className="px-4 py-3 font-medium text-gray-800 max-w-xs truncate">
-                  {issue.subject}
+                  <a
+                    href={issue.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 hover:underline"
+                    title={issue.subject}
+                  >
+                    {issue.subject}
+                  </a>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{issue.assigned_to ?? '미할당'}</td>
                 <td className="px-4 py-3 text-gray-600">{issue.due_date}</td>

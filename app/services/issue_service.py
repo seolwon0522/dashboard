@@ -8,6 +8,7 @@ from datetime import date, datetime
 from app.client.redmine_client import RedmineClient
 from app.core.cache import TTLCache
 from app.core.config import Settings
+from app.services.utils import calc_overdue
 
 
 class IssueService:
@@ -31,8 +32,8 @@ class IssueService:
                 "project_id": project_id,
                 "status_id": "*",  # 모든 상태 포함
             }
-            # 하위 프로젝트 포함 여부
-            if self._settings.dashboard.include_subprojects:
+            # 하위 프로젝트 제외 시에만 파라미터 추가 (Redmine: "!*" = 제외)
+            if not self._settings.dashboard.include_subprojects:
                 params["subproject_id"] = "!*"
             return await self._client.fetch_all_issues(params)
 
@@ -68,11 +69,10 @@ class IssueService:
             if group:
                 group_counts[group] += 1
 
-            # 기한 초과 판단: due_date가 있고, 오늘보다 이전이고, closed 그룹이 아닌 경우
-            due_str = issue.get("due_date")
-            if due_str and status_id not in overdue_exclude:
-                due_date = date.fromisoformat(due_str)
-                if due_date < today:
+            # 기한 초과 판단: closed 그룹이 아닌 경우에만 확인
+            if status_id not in overdue_exclude:
+                is_overdue, _ = calc_overdue(issue.get("due_date"), today)
+                if is_overdue:
                     overdue_count += 1
 
         return {
@@ -89,6 +89,7 @@ class IssueService:
         issues = await self._fetch_project_issues(pid)
 
         today = date.today()
+        base_url = self._settings.redmine.base_url
         overdue_exclude = self._settings.get_excluded_status_ids(
             self._settings.dashboard.overdue_rule.exclude_status_groups
         )
@@ -101,11 +102,9 @@ class IssueService:
             if not due_str or status_id in overdue_exclude:
                 continue
 
-            due_date = date.fromisoformat(due_str)
-            if due_date >= today:
+            is_overdue, days_overdue = calc_overdue(due_str, today)
+            if not is_overdue:
                 continue
-
-            days_overdue = (today - due_date).days
             assigned = issue.get("assigned_to")
 
             overdue_list.append({
@@ -116,6 +115,7 @@ class IssueService:
                 "status": issue.get("status", {}).get("name", ""),
                 "priority": issue.get("priority", {}).get("name"),
                 "days_overdue": days_overdue,
+                "url": f"{base_url}/issues/{issue['id']}",
             })
 
         # 초과 일수 기준 내림차순 정렬

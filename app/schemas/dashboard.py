@@ -44,6 +44,7 @@ class OverdueIssueItem(BaseModel):
     status: str
     priority: str | None = None
     days_overdue: int
+    url: str
 
 
 class OverdueIssuesResponse(BaseModel):
