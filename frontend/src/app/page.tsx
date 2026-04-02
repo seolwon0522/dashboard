@@ -151,9 +151,9 @@ export default function DashboardPage() {
               <WorkloadBar
                 workload={workload?.workload ?? []}
                 onSelect={(userId, userName) => {
-                  // 클릭한 담당자 정보로 모달 열기
+                  // 워크로드 목록에서 클릭한 담당자 찾아 모달 열기
                   const member = workload?.workload.find(
-                    (w) => w.user_id === userId && w.name === userName
+                    (w) => w.user_id === userId
                   )
                   if (member) setSelectedMember(member)
                 }}
@@ -172,7 +172,7 @@ export default function DashboardPage() {
       {selectedMember && (
         <MemberModal
           member={selectedMember}
-          allOverdueIssues={overdue?.issues ?? []}
+          projectId={selectedProjectId}
           onClose={() => setSelectedMember(null)}
         />
       )}

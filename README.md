@@ -1,7 +1,8 @@
-# Redmine Dashboard API
+# Redmine Dashboard
 
-Redmine REST API 기반 대시보드 백엔드 서비스.
+Redmine REST API 기반 대시보드 시스템.
 데이터베이스, Redis 없이 인메모리 TTL 캐시만으로 구동되는 MVP.
+**FastAPI 백엔드 + Next.js 프론트엔드** 풀스택 구성.
 
 ---
 
@@ -40,6 +41,10 @@ Redmine 프로젝트 관리 시스템의 데이터를 집계하여 대시보드 
 | Uvicorn | 0.30.0 |
 | httpx | 0.27.0 |
 | Pydantic v2 | (FastAPI 내장) |
+| Next.js | 14.2.0 |
+| React | 18.3+ |
+| TypeScript | 5.x |
+| Tailwind CSS | 3.4+ |
 
 ---
 
@@ -49,29 +54,45 @@ Redmine 프로젝트 관리 시스템의 데이터를 집계하여 대시보드 
 dashboard/
 ├── config.json                      ← Redmine 연결 정보 및 대시보드 설정
 ├── requirements.txt                 ← Python 패키지 목록
-└── app/
-    ├── main.py                      ← FastAPI 앱 진입점, lifespan 이벤트
-    │
-    ├── core/
-    │   ├── config.py                ← config.json 파싱 → Settings 싱글턴
-    │   └── cache.py                 ← TTL 기반 인메모리 캐시
-    │
-    ├── client/
-    │   └── redmine_client.py        ← httpx 비동기 클라이언트 + 페이지네이션 전담
-    │
-    ├── services/
-    │   ├── issue_service.py         ← 이슈 집계/요약/overdue 비즈니스 로직
-    │   ├── project_service.py       ← 프로젝트 목록 + 이슈 수 집계
-    │   └── workload_service.py      ← 담당자별 워크로드 집계
-    │
-    ├── api/
-    │   └── v1/
-    │       ├── router.py            ← v1 라우터 통합 등록
-    │       ├── dashboard.py         ← 4개 대시보드 엔드포인트 정의
-    │       └── deps.py              ← FastAPI Depends 의존성 주입 함수
-    │
-    └── schemas/
-        └── dashboard.py             ← Pydantic 응답 모델 정의
+├── app/
+│   ├── main.py                      ← FastAPI 앱 진입점, lifespan 이벤트
+│   ├── core/
+│   │   ├── config.py                ← config.json 파싱 → Settings 싱글턴
+│   │   └── cache.py                 ← TTL 기반 인메모리 캐시
+│   ├── client/
+│   │   └── redmine_client.py        ← httpx 비동기 클라이언트 + 페이지네이션 전담
+│   ├── services/
+│   │   ├── issue_service.py         ← 이슈 집계/요약/overdue 비즈니스 로직
+│   │   ├── project_service.py       ← 프로젝트 목록 + 이슈 수 집계
+│   │   └── workload_service.py      ← 담당자별 워크로드 + 멤버 이슈 상세
+│   ├── api/
+│   │   └── v1/
+│   │       ├── router.py            ← v1 라우터 통합 등록
+│   │       ├── dashboard.py         ← 5개 대시보드 엔드포인트 정의
+│   │       └── deps.py              ← FastAPI Depends 의존성 주입 함수
+│   └── schemas/
+│       └── dashboard.py             ← Pydantic 응답 모델 정의
+│
+└── frontend/                        ← Next.js 프론트엔드
+    ├── next.config.mjs              ← API 프록시 설정 (rewrites)
+    ├── tailwind.config.ts           ← Tailwind 설정 + 모달 애니메이션
+    ├── postcss.config.js
+    ├── package.json
+    └── src/
+        ├── app/
+        │   ├── layout.tsx           ← 루트 레이아웃
+        │   ├── page.tsx             ← 메인 대시보드 페이지
+        │   └── globals.css          ← Tailwind 전역 스타일
+        ├── components/
+        │   ├── SummaryCard.tsx       ← 요약 통계 카드
+        │   ├── OverdueTable.tsx      ← 기한 초과 이슈 테이블
+        │   ├── WorkloadBar.tsx       ← 담당자별 워크로드 바 차트
+        │   ├── ProjectSelect.tsx     ← 프로젝트 선택 드롭다운
+        │   └── MemberModal.tsx       ← 담당자 이슈 상세 모달
+        ├── lib/
+        │   └── api.ts               ← API 호출 함수
+        └── types/
+            └── dashboard.ts         ← TypeScript 타입 정의
 ```
 
 ---
@@ -131,7 +152,18 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 
-### 4. API 문서
+### 4. 프론트엔드 실행
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+프론트엔드는 `http://localhost:3000`에서 실행됩니다.  
+`next.config.mjs`의 rewrites 설정으로 `/api/v1/*` 요청이 백엔드(8000)로 프록시됩니다.
+
+### 5. API 문서
 
 | URL | 설명 |
 |---|---|
@@ -243,6 +275,45 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
 
 ---
 
+### `GET /api/v1/dashboard/workload/member`
+
+특정 담당자의 오픈/진행중 이슈 상세 목록 반환. 기존 프로젝트 이슈 캐시를 재사용하여 추가 Redmine API 호출 없음.
+
+**쿼리 파라미터**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `user_id` | int (선택) | 담당자 ID |
+| `unassigned` | bool (선택) | `true`면 미할당 이슈만 반환 |
+| `project_id` | string (선택) | 조회할 프로젝트 ID |
+
+**응답 예시**
+
+```json
+{
+  "project_id": "bp-cloudpos",
+  "user_id": 23,
+  "user_name": "이관규",
+  "total": 3,
+  "overdue_count": 1,
+  "issues": [
+    {
+      "id": 25,
+      "subject": "POS 배포 관리 I/F 연동 개발",
+      "status": "진행",
+      "priority": "보통",
+      "due_date": "2026-04-17",
+      "is_overdue": false,
+      "days_overdue": 0,
+      "url": "http://your-redmine/issues/25"
+    }
+  ],
+  "cached_at": "2026-04-02T10:45:33.304795"
+}
+```
+
+---
+
 ## 설정 파일 가이드
 
 ### `config.json` 전체 구조
@@ -310,6 +381,21 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
 | 하드코딩 없는 상태 분류 | 완료 | config의 `status_groups` 참조 |
 | Swagger UI 자동 생성 | 완료 | `/docs` |
 | 실제 Redmine API 연결 확인 | 완료 | `bp-cloudpos` 프로젝트 응답 검증 |
+
+### ✅ 완료 (v0.2 — 프론트엔드 + 담당자 상세)
+
+| 항목 | 상태 | 비고 |
+|---|---|---|
+| Next.js + TypeScript 프론트엔드 | 완료 | App Router, Tailwind CSS |
+| 요약 카드 (전체/오픈/완료/초과) | 완료 | 4개 색상 카드 |
+| 기한 초과 이슈 테이블 | 완료 | 초과일 기준 색상 코딩 |
+| 담당자별 워크로드 바 차트 | 완료 | CSS 기반, 라이브러리 미사용 |
+| 프로젝트 선택 드롭다운 | 완료 | 프로젝트 변경 시 전체 데이터 재조회 |
+| `GET /dashboard/workload/member` | 완료 | 담당자별 오픈/진행중 이슈 상세 |
+| 담당자 클릭 → 모달 팝업 | 완료 | 전체 일감 표시, 기한초과 하이라이트 |
+| Redmine 이슈 직접 링크 | 완료 | 모달 내 제목 클릭 시 Redmine 이동 |
+| 모달 UX (ESC, 배경 클릭, 애니메이션) | 완료 | body 스크롤 잠금 포함 |
+| API 프록시 (Next.js rewrites) | 완료 | CORS 불필요 |
 
 ---
 
@@ -391,4 +477,5 @@ DB 도입 후:
 
 | 버전 | 날짜 | 내용 |
 |---|---|---|
+| v0.2.0 | 2026-04-02 | 프론트엔드(Next.js) 추가, 담당자별 이슈 상세 API + 모달 UI |
 | v0.1.0 | 2026-04-02 | MVP 초기 구현: 4계층 구조, 4개 엔드포인트, 인메모리 캐시 |

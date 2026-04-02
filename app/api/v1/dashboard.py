@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.v1.deps import get_issue_service, get_project_service, get_workload_service
 from app.schemas.dashboard import (
     DashboardSummary,
+    MemberIssuesResponse,
     OverdueIssuesResponse,
     ProjectListResponse,
     WorkloadResponse,
@@ -51,3 +52,18 @@ async def get_workload(
 ):
     """담당자별 워크로드: open 이슈 수 + overdue 이슈 수"""
     return await service.get_workload(project_id)
+
+
+@router.get("/workload/member", response_model=MemberIssuesResponse)
+async def get_member_issues(
+    user_id: int | None = Query(None, description="담당자 ID (미지정 시 unassigned 파라미터 확인)"),
+    unassigned: bool = Query(False, description="True면 미할당 이슈만 반환"),
+    project_id: str | None = Query(None, description="프로젝트 ID (미지정 시 config 기본값)"),
+    service: WorkloadService = Depends(get_workload_service),
+):
+    """담당자별 오픈/진행중 이슈 상세 목록"""
+    return await service.get_member_issues(
+        user_id=user_id,
+        unassigned=unassigned,
+        project_id=project_id,
+    )

@@ -79,3 +79,28 @@ class CacheStatsResponse(BaseModel):
 class CacheInvalidateResponse(BaseModel):
     """캐시 무효화 응답"""
     deleted: int
+
+
+# ── 담당자별 이슈 상세 ──
+
+class MemberIssueItem(BaseModel):
+    """담당자별 이슈 항목 (오픈/진행중 전체)"""
+    id: int
+    subject: str
+    status: str
+    priority: str | None = None
+    due_date: str | None = None
+    is_overdue: bool = False
+    days_overdue: int = 0
+    url: str
+
+
+class MemberIssuesResponse(BaseModel):
+    """GET /api/v1/dashboard/workload/member 응답"""
+    project_id: str
+    user_id: int | None = None
+    user_name: str
+    total: int
+    overdue_count: int
+    issues: list[MemberIssueItem]
+    cached_at: datetime

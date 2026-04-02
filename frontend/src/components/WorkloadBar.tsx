@@ -22,18 +22,26 @@ export default function WorkloadBar({ workload, onSelect }: Props) {
   const maxOpen = Math.max(...workload.map((w) => w.open_issues), 1)
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-5 space-y-3">
+    <div className="bg-white rounded-lg shadow-sm p-5 space-y-1">
       {workload.map((item) => (
-        <div key={item.user_id ?? 'unassigned'}>
+        <div
+          key={item.user_id ?? 'unassigned'}
+          role="button"
+          tabIndex={0}
+          onClick={() => onSelect?.(item.user_id, item.name)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onSelect?.(item.user_id, item.name)
+            }
+          }}
+          className="rounded-lg px-3 py-2 cursor-pointer transition-colors hover:bg-blue-50 active:bg-blue-100"
+        >
           {/* 담당자 이름 + 숫자 */}
           <div className="flex justify-between text-sm mb-1">
-            <button
-              type="button"
-              onClick={() => onSelect?.(item.user_id, item.name)}
-              className="font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-left"
-            >
+            <span className="font-medium text-blue-600">
               {item.name}
-            </button>
+            </span>
             <span className="text-gray-500 text-xs">
               open {item.open_issues}
               {item.overdue_issues > 0 && (

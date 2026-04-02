@@ -2,6 +2,7 @@
 // Next.js rewrites()를 통해 /api/v1/* → FastAPI로 프록시됨 (CORS 불필요)
 import type {
   DashboardSummary,
+  MemberIssuesResponse,
   OverdueIssuesResponse,
   ProjectListResponse,
   WorkloadResponse,
@@ -45,4 +46,25 @@ export async function fetchOverdueIssues(projectId?: string): Promise<OverdueIss
 // 담당자별 워크로드 조회
 export async function fetchWorkload(projectId?: string): Promise<WorkloadResponse> {
   return apiFetch(withProject('/api/v1/dashboard/workload', projectId))
+}
+
+// 담당자별 오픈/진행중 이슈 상세 조회
+export async function fetchMemberIssues(
+  userId: number | null,
+  projectId?: string,
+): Promise<MemberIssuesResponse> {
+  const base = '/api/v1/dashboard/workload/member'
+  const params = new URLSearchParams()
+
+  // 미할당(userId === null)이면 unassigned=true, 아니면 user_id 지정
+  if (userId === null) {
+    params.set('unassigned', 'true')
+  } else {
+    params.set('user_id', String(userId))
+  }
+  if (projectId) {
+    params.set('project_id', projectId)
+  }
+
+  return apiFetch(`${base}?${params.toString()}`)
 }

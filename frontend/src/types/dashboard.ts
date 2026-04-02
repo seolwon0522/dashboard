@@ -53,3 +53,25 @@ export interface WorkloadResponse {
   workload: WorkloadItem[]
   cached_at: string
 }
+
+// GET /api/v1/dashboard/workload/member 응답 내 항목
+export interface MemberIssueItem {
+  id: number
+  subject: string
+  status: string
+  priority: string | null
+  due_date: string | null
+  is_overdue: boolean
+  days_overdue: number
+  url: string
+}
+
+export interface MemberIssuesResponse {
+  project_id: string
+  user_id: number | null
+  user_name: string
+  total: number
+  overdue_count: number
+  issues: MemberIssueItem[]
+  cached_at: string
+}
