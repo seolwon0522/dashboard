@@ -1,0 +1,27 @@
+{
+  "redmine": {
+    "base_url": "http://106.255.231.26:6080",
+    "api_key": "85c3a9a8e4b32b521fe69a38ec478faa29cdff87",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "page_size": 100
+  },
+  "dashboard": {
+    "default_project": "bp-cloudpos-docs",
+    "include_subprojects": false,
+    "cache_ttl_seconds": 300,
+    "status_groups": {
+      "open": [1, 2],
+      "in_progress": [3, 4],
+      "closed": [5, 6, 7]
+    },
+    "overdue_rule": {
+      "field": "due_date",
+      "exclude_status_groups": ["closed"]
+    },
+    "stale_rule": {
+      "days_without_update": 14,
+      "exclude_status_groups": ["closed"]
+    }
+  }
+}
