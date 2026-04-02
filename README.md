@@ -80,15 +80,19 @@ dashboard/
     ├── package.json
     └── src/
         ├── app/
-        │   ├── layout.tsx           ← 루트 레이아웃
-        │   ├── page.tsx             ← 메인 대시보드 페이지
-        │   └── globals.css          ← Tailwind 전역 스타일
+        │   ├── layout.tsx                    ← 루트 레이아웃
+        │   ├── globals.css                   ← Tailwind 전역 스타일
+        │   ├── page.tsx                      ← 프로젝트 선택 페이지 (/)
+        │   └── dashboard/
+        │       └── [projectId]/
+        │           └── page.tsx              ← 프로젝트별 대시보드 (/dashboard/:id)
         ├── components/
-        │   ├── SummaryCard.tsx       ← 요약 통계 카드
-        │   ├── OverdueTable.tsx      ← 기한 초과 이슈 테이블
-        │   ├── WorkloadBar.tsx       ← 담당자별 워크로드 바 차트
-        │   ├── ProjectSelect.tsx     ← 프로젝트 선택 드롭다운
-        │   └── MemberModal.tsx       ← 담당자 이슈 상세 모달
+        │   ├── DashboardView.tsx      ← 대시보드 본체 (데이터 조회 + 렌더링)
+        │   ├── SummaryCard.tsx        ← KPI 요약 카드 (highlight / subtitle 지원)
+        │   ├── OverdueTable.tsx       ← 기한 초과 이슈 테이블 (0건 시 숨김)
+        │   ├── WorkloadBar.tsx        ← 워크로드 바 (open/overdue 스택 바)
+        │   ├── ProjectSelect.tsx      ← 프로젝트 전환 드롭다운
+        │   └── MemberModal.tsx        ← 담당자 이슈 상세 모달
         ├── lib/
         │   └── api.ts               ← API 호출 함수
         └── types/
@@ -396,6 +400,20 @@ npm run dev
 | Redmine 이슈 직접 링크 | 완료 | 모달 내 제목 클릭 시 Redmine 이동 |
 | 모달 UX (ESC, 배경 클릭, 애니메이션) | 완료 | body 스크롤 잠금 포함 |
 | API 프록시 (Next.js rewrites) | 완료 | CORS 불필요 |
+
+### ✅ 완료 (v0.3 — 라우팅 분리 + UI/UX 전면 개선)
+
+| 항목 | 상태 | 비고 |
+|---|---|---|
+| 프로젝트 선택 초기 화면 (`/`) | 완료 | 카드 그리드, open 이슈 수 표시 |
+| 프로젝트별 대시보드 라우팅 (`/dashboard/[projectId]`) | 완료 | URL 기반 프로젝트 ID, 뒤로가기 지원 |
+| DashboardView 컴포넌트 분리 | 완료 | page.tsx에서 데이터 로직 분리 |
+| KPI 카드 재구성 | 완료 | 전체→진행 중 교체, 기한초과 highlight, Closed에 처리율% 표시 |
+| 기한 초과 0건 시 영역 축소 | 완료 | 빈 카드 대신 카드 내 안내 문구로 대체 |
+| 3컬럼 레이아웃 | 완료 | 워크로드(1/3 좌) + 기한초과(2/3 우), 레이아웃 고정 |
+| 이슈 상태 분포 바 추가 | 완료 | by_status_group 데이터 재활용, 순수 Tailwind CSS |
+| WorkloadBar open/overdue 스택 바 | 완료 | overdue 구간 적색, open 나머지 청색 |
+| OverdueTable 컬럼 정리 | 완료 | ID를 제목에 인라인 병합, 불필요 컬럼 제거 |
 
 ---
 

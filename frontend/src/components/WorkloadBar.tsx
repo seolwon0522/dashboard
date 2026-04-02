@@ -1,5 +1,6 @@
 // 담당자별 워크로드 바 차트 컴포넌트
 // 외부 차트 라이브러리 미사용 — Tailwind + 인라인 스타일로 구현
+// 카드 래퍼는 부모(DashboardView)에서 제공
 import type { WorkloadItem } from '@/types/dashboard'
 
 interface Props {
@@ -12,7 +13,7 @@ export default function WorkloadBar({ workload, onSelect }: Props) {
   // 데이터 없을 때
   if (workload.length === 0) {
     return (
-      <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400 text-sm">
+      <div className="px-4 py-6 text-center text-gray-400 text-sm">
         워크로드 데이터가 없습니다.
       </div>
     )
@@ -22,7 +23,7 @@ export default function WorkloadBar({ workload, onSelect }: Props) {
   const maxOpen = Math.max(...workload.map((w) => w.open_issues), 1)
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-5 space-y-1">
+    <div className="divide-y divide-gray-100">
       {workload.map((item) => (
         <div
           key={item.user_id ?? 'unassigned'}
@@ -35,29 +36,36 @@ export default function WorkloadBar({ workload, onSelect }: Props) {
               onSelect?.(item.user_id, item.name)
             }
           }}
-          className="rounded-lg px-3 py-2 cursor-pointer transition-colors hover:bg-blue-50 active:bg-blue-100"
+          className="flex items-center gap-2 py-2 px-3 cursor-pointer transition-colors hover:bg-blue-50 active:bg-blue-100"
         >
-          {/* 담당자 이름 + 숫자 */}
-          <div className="flex justify-between text-sm mb-1">
-            <span className="font-medium text-blue-600">
-              {item.name}
-            </span>
-            <span className="text-gray-500 text-xs">
-              open {item.open_issues}
-              {item.overdue_issues > 0 && (
-                <span className="ml-1 text-red-500">/ 초과 {item.overdue_issues}</span>
-              )}
-            </span>
-          </div>
+          {/* 담당자 이름 */}
+          <span className="w-16 shrink-0 text-xs font-medium text-gray-700 truncate">
+            {item.name}
+          </span>
 
-          {/* 바 트랙 */}
-          <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
-            {/* open 이슈 바 (파란색) */}
+          {/* 바 트랙 — overdue가 있으면 빨간색 구간 포함 */}
+          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden flex">
+            {item.overdue_issues > 0 && (
+              <div
+                className="h-full bg-red-400 transition-all duration-300"
+                style={{ width: `${(item.overdue_issues / maxOpen) * 100}%` }}
+              />
+            )}
             <div
-              className="h-full bg-blue-400 rounded-full transition-all duration-300"
-              style={{ width: `${(item.open_issues / maxOpen) * 100}%` }}
+              className="h-full bg-blue-400 transition-all duration-300"
+              style={{ width: `${((item.open_issues - item.overdue_issues) / maxOpen) * 100}%` }}
             />
           </div>
+
+          {/* 숫자 */}
+          <span className="shrink-0 text-xs tabular-nums text-gray-500">
+            {item.open_issues}
+          </span>
+          {item.overdue_issues > 0 && (
+            <span className="shrink-0 text-xs tabular-nums text-red-500 font-medium -ml-1">
+              ({item.overdue_issues})
+            </span>
+          )}
         </div>
       ))}
     </div>
