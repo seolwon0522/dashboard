@@ -8,6 +8,7 @@ import OverdueTable from '@/components/OverdueTable'
 import ProjectSelect from '@/components/ProjectSelect'
 import SummaryCard from '@/components/SummaryCard'
 import WorkloadBar from '@/components/WorkloadBar'
+import MemberModal from '@/components/MemberModal'
 import {
   fetchOverdueIssues,
   fetchProjects,
@@ -18,6 +19,7 @@ import type {
   DashboardSummary,
   OverdueIssuesResponse,
   ProjectItem,
+  WorkloadItem,
   WorkloadResponse,
 } from '@/types/dashboard'
 
@@ -33,6 +35,8 @@ export default function DashboardPage() {
   // 로딩 / 에러 상태
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // 담당자별 모달 상태 (워크로드 바 클릭 시)
+  const [selectedMember, setSelectedMember] = useState<WorkloadItem | null>(null)
 
   // 앱 최초 로드 시 프로젝트 목록을 먼저 가져옴
   useEffect(() => {
@@ -144,7 +148,16 @@ export default function DashboardPage() {
               <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">
                 담당자별 워크로드
               </h2>
-              <WorkloadBar workload={workload?.workload ?? []} />
+              <WorkloadBar
+                workload={workload?.workload ?? []}
+                onSelect={(userId, userName) => {
+                  // 클릭한 담당자 정보로 모달 열기
+                  const member = workload?.workload.find(
+                    (w) => w.user_id === userId && w.name === userName
+                  )
+                  if (member) setSelectedMember(member)
+                }}
+              />
             </section>
           </div>
 
@@ -153,6 +166,15 @@ export default function DashboardPage() {
             기준 시각: {new Date(summary.cached_at).toLocaleString('ko-KR')}
           </p>
         </>
+      )}
+
+      {/* ── 담당자별 작업현황 모달 ── */}
+      {selectedMember && (
+        <MemberModal
+          member={selectedMember}
+          allOverdueIssues={overdue?.issues ?? []}
+          onClose={() => setSelectedMember(null)}
+        />
       )}
     </main>
   )

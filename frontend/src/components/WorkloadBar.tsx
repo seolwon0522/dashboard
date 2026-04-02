@@ -4,9 +4,11 @@ import type { WorkloadItem } from '@/types/dashboard'
 
 interface Props {
   workload: WorkloadItem[]
+  // 담당자 클릭 시 호출되는 콜백 (모달 열기용)
+  onSelect?: (userId: number | null, userName: string) => void
 }
 
-export default function WorkloadBar({ workload }: Props) {
+export default function WorkloadBar({ workload, onSelect }: Props) {
   // 데이터 없을 때
   if (workload.length === 0) {
     return (
@@ -25,7 +27,13 @@ export default function WorkloadBar({ workload }: Props) {
         <div key={item.user_id ?? 'unassigned'}>
           {/* 담당자 이름 + 숫자 */}
           <div className="flex justify-between text-sm mb-1">
-            <span className="font-medium text-gray-700">{item.name}</span>
+            <button
+              type="button"
+              onClick={() => onSelect?.(item.user_id, item.name)}
+              className="font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-left"
+            >
+              {item.name}
+            </button>
             <span className="text-gray-500 text-xs">
               open {item.open_issues}
               {item.overdue_issues > 0 && (
