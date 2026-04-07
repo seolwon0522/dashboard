@@ -24,13 +24,13 @@ export default function WorkloadBar({ workload, activeAssignee, onFilter, onOpen
       <table className="w-full">
         <thead>
           <tr className="border-b border-gray-100">
-            <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+            <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-400 whitespace-nowrap">
               Assignee
             </th>
-            <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wide w-14">
+            <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-400 whitespace-nowrap w-14">
               Open
             </th>
-            <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wide w-16">
+            <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-400 whitespace-nowrap w-20">
               Overdue
             </th>
             <th className="w-8" />

@@ -3,6 +3,7 @@
 // 주의 필요 이슈 패널 — Overdue / Due Soon / High Priority 탭
 import { useMemo, useState } from 'react'
 import type { IssueListItem } from '@/types/dashboard'
+import { PRIORITY_BADGE, getPriorityLabel } from '@/lib/labels'
 
 interface Props {
   issues: IssueListItem[]
@@ -12,14 +13,6 @@ interface Props {
 type Tab = 'overdue' | 'due_soon' | 'high_priority'
 
 const HIGH_PRIORITY = new Set(['Immediate', 'Urgent', 'High'])
-
-const PRIORITY_BADGE: Record<string, string> = {
-  Immediate: 'bg-red-100 text-red-700',
-  Urgent: 'bg-orange-100 text-orange-700',
-  High: 'bg-amber-100 text-amber-700',
-  Normal: 'bg-gray-100 text-gray-500',
-  Low: 'bg-gray-50 text-gray-400',
-}
 
 function IssueRow({ issue }: { issue: IssueListItem }) {
   return (
@@ -46,7 +39,7 @@ function IssueRow({ issue }: { issue: IssueListItem }) {
                 PRIORITY_BADGE[issue.priority] ?? 'bg-gray-100 text-gray-500'
               }`}
             >
-              {issue.priority}
+              {getPriorityLabel(issue.priority)}
             </span>
           )}
           {issue.assigned_to && (
@@ -55,7 +48,7 @@ function IssueRow({ issue }: { issue: IssueListItem }) {
             </span>
           )}
           {!issue.assigned_to && (
-            <span className="text-[11px] text-gray-300 italic">Unassigned</span>
+            <span className="text-[11px] text-gray-300 italic">미할당</span>
           )}
           {issue.is_overdue && (
             <span className="text-[11px] font-semibold text-red-600 shrink-0">
@@ -120,9 +113,9 @@ export default function AttentionPanel({ issues, loading }: Props) {
   const activeItems = tab === 'overdue' ? overdue : tab === 'due_soon' ? dueSoon : highPriority
 
   const emptyMessage: Record<Tab, string> = {
-    overdue: 'No overdue issues — great work!',
-    due_soon: 'Nothing due in the next 7 days.',
-    high_priority: 'No high-priority open issues.',
+    overdue: 'No overdue issues.',
+    due_soon: 'No issues due within 7 days.',
+    high_priority: 'No open high-priority issues.',
   }
 
   return (
@@ -158,16 +151,16 @@ export default function AttentionPanel({ issues, loading }: Props) {
       {/* Content */}
       <div className="divide-y divide-gray-50 overflow-y-auto" style={{ maxHeight: '280px' }}>
         {loading ? (
-          <div className="flex items-center justify-center py-10 text-gray-400 text-sm">
+          <div className="flex items-center justify-center py-8 text-gray-400 text-sm">
             <svg className="animate-spin w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
-            Loading...
+            Loading issues...
           </div>
         ) : activeItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10 gap-1.5">
-            <span className="text-green-500 text-xl">✓</span>
+          <div className="flex flex-col items-center justify-center py-6 gap-1.5">
+            <span className="text-green-500 text-lg">✓</span>
             <p className="text-sm text-gray-400">{emptyMessage[tab]}</p>
           </div>
         ) : (

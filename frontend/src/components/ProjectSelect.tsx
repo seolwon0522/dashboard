@@ -24,7 +24,7 @@ export default function ProjectSelect({ projects, selectedId, onChange }: Props)
         <option value="" disabled>프로젝트 선택</option>
         {projects.map((p) => (
           <option key={p.id} value={p.id}>
-            {p.name} ({p.open_issues}건 open)
+            {p.name} ({p.open_issues} open)
           </option>
         ))}
       </select>

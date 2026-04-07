@@ -83,7 +83,7 @@ dashboard/
 │   ├── api/                           # HTTP 수신 계층
 │   │   └── v1/
 │   │       ├── router.py              # v1 라우터 통합 등록
-│   │       ├── dashboard.py           # 5개 대시보드 엔드포인트
+│   │       ├── dashboard.py           # 6개 대시보드 엔드포인트
 │   │       └── deps.py                # FastAPI Depends 의존성 주입
 │   │
 │   └── schemas/
@@ -109,7 +109,8 @@ dashboard/
         │   ├── FilterChips.tsx        # 활성 필터 칩 표시 + 제거
         │   ├── StatusDistribution.tsx # 상태 분포 위젯 (클릭 시 이슈 테이블 필터)
         │   ├── AttentionPanel.tsx     # 주의 이슈 패널 (Overdue / Due Soon / High Priority 탭)
-        │   ├── IssueTable.tsx         # 전체 이슈 테이블 (정렬·검색·페이지네이션)
+        │   ├── IssueTable.tsx         # 전체 이슈 테이블 (정렬·검색·페이지네이션·행 선택)
+        │   ├── IssueDetailDrawer.tsx  # 선택 이슈 상세 패널 (기본 정보 + 설명 + 변경 이력)
         │   ├── WorkloadBar.tsx        # 담당자별 워크로드 컴팩트 테이블 (클릭 시 필터)
         │   ├── SummaryCard.tsx        # KPI 카드 기본 컴포넌트 (레거시, 유지)
         │   ├── OverdueTable.tsx       # 기한 초과 이슈 테이블 (레거시, 유지)
@@ -117,7 +118,8 @@ dashboard/
         │   └── MemberModal.tsx        # 담당자 이슈 상세 모달
         │
         ├── lib/
-        │   └── api.ts                 # API 호출 함수 모음
+        │   ├── api.ts                 # API 호출 함수 모음
+        │   └── labels.ts              # 공통 상태/우선순위/동기화 라벨 상수
         │
         └── types/
             └── dashboard.ts           # TypeScript 타입 정의 (백엔드 스키마와 1:1)
@@ -226,7 +228,8 @@ JSON 응답  →  Next.js 컴포넌트 렌더링
 - **Assignee Workload 행 클릭** → 해당 담당자로 이슈 테이블 필터링 (눈 아이콘은 상세 모달)
 - **Status Distribution 행 클릭** → 해당 상태 그룹으로 이슈 테이블 필터링
 - **FilterChips** → 활성 필터 확인 및 개별 제거 / Clear all
-- **IssueTable 행 클릭** → Redmine 이슈 페이지 새 탭 열기
+- **IssueTable 행 클릭** → 우측 이슈 상세 패널 열기
+- **이슈 상세 패널** → 기본 정보 / 설명 / 변경 이력 확인, 필요 시 Redmine 원본 링크 열기
 - **IssueTable 컬럼 헤더 클릭** → 오름차순/내림차순 정렬 토글
 - **헤더 ↺ 버튼** → 전체 데이터 수동 새로고침 (모든 캐시 재조회)
 - **헤더 드롭다운** → 프로젝트 전환 (URL 변경, 필터 초기화)
@@ -292,6 +295,7 @@ npm run dev
 | `GET` | `/api/v1/dashboard/summary` | 이슈 전체 요약 통계 |
 | `GET` | `/api/v1/dashboard/projects` | 전체 프로젝트 목록 + open 이슈 수 |
 | `GET` | `/api/v1/dashboard/issues` | **전체 이슈 목록** (상태 그룹·담당자·기한 초과 여부 포함) |
+| `GET` | `/api/v1/dashboard/issues/{issue_id}` | **단일 이슈 상세 + journals 변경 이력** |
 | `GET` | `/api/v1/dashboard/issues/overdue` | 기한 초과 이슈 목록 |
 | `GET` | `/api/v1/dashboard/workload` | 담당자별 워크로드 |
 | `GET` | `/api/v1/dashboard/workload/member` | 특정 담당자 이슈 상세 |
@@ -324,6 +328,53 @@ npm run dev
     }
   ],
   "cached_at": "2026-04-07T10:00:00.000000"
+}
+```
+
+---
+
+### `GET /api/v1/dashboard/issues/{issue_id}`
+
+선택한 이슈의 상세 정보와 Redmine journal 변경 이력을 반환.
+Redmine `GET /issues/{id}.json?include=journals`를 사용하며, 이슈 단건 기준으로 짧은 TTL 캐시를 적용.
+
+```json
+{
+  "id": 8821,
+  "subject": "API 명세 업데이트",
+  "description": "배포 전 연동 규격 최종 점검 필요",
+  "status": "In Progress",
+  "status_id": 3,
+  "status_group": "in_progress",
+  "priority": "High",
+  "assigned_to": "홍길동",
+  "assigned_to_id": 12,
+  "author": "김철수",
+  "tracker": "Feature",
+  "category": null,
+  "version": "v1.2.0",
+  "start_date": "2026-04-01",
+  "due_date": "2026-04-10",
+  "done_ratio": 70,
+  "created_on": "2026-04-01T09:00:00Z",
+  "updated_on": "2026-04-07T13:20:00Z",
+  "url": "http://your-redmine/issues/8821",
+  "journals": [
+    {
+      "id": 101,
+      "user": "홍길동",
+      "created_on": "2026-04-07T13:20:00Z",
+      "notes": "배포 일정 확인 완료",
+      "changes": [
+        {
+          "field": "status_id",
+          "property": "attr",
+          "old_value": "Open",
+          "new_value": "In Progress"
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -510,13 +561,15 @@ npm run dev
 | 백엔드 | `WorkloadService` 캐시 중복 제거 (IssueService 캐시 재사용) | v0.3 |
 | 백엔드 | 글로벌 예외 핸들러 (JSON 500 응답 보장) | v0.3 |
 | 백엔드 | 전체 이슈 목록 API (`GET /api/v1/dashboard/issues`) — 캐시 재사용 | v0.4 |
+| 백엔드 | 단일 이슈 상세 API (`GET /api/v1/dashboard/issues/{issue_id}`) — journals 포함 | v0.5 |
 | 프론트엔드 | 프로젝트 선택 초기 화면 (`/`) — 카드 그리드 | v0.3 |
 | 프론트엔드 | 프로젝트별 대시보드 (`/dashboard/[projectId]`) — URL 기반 라우팅 | v0.3 |
 | 프론트엔드 | KPI 카드 5개 — Total / Open / In Progress / Overdue / Completion Rate | v0.4 |
 | 프론트엔드 | KPI · 담당자 · 상태 클릭 → 이슈 테이블 공유 필터링 (`useReducer`) | v0.4 |
 | 프론트엔드 | 활성 필터 칩 표시 + 개별/전체 제거 (`FilterChips`) | v0.4 |
 | 프론트엔드 | 주의 이슈 패널 — Overdue / Due Soon / High Priority 탭 (`AttentionPanel`) | v0.4 |
-| 프론트엔드 | 전체 이슈 테이블 — 7컬럼 정렬·검색·페이지네이션·행 클릭 (`IssueTable`) | v0.4 |
+| 프론트엔드 | 전체 이슈 테이블 — 7컬럼 정렬·검색·페이지네이션·행 선택 (`IssueTable`) | v0.4 |
+| 프론트엔드 | 우측 이슈 상세 패널 — 기본 정보 / 설명 / 변경 이력 (`IssueDetailDrawer`) | v0.5 |
 | 프론트엔드 | 담당자별 워크로드 컴팩트 테이블 (클릭 필터 + 상세 모달 분리) | v0.4 |
 | 프론트엔드 | 상태 분포 위젯 — 건수·% + 클릭 필터 (`StatusDistribution`) | v0.4 |
 | 프론트엔드 | 헤더 통합 — 프로젝트명·선택·동기화 시각·수동 새로고침 버튼 | v0.4 |
