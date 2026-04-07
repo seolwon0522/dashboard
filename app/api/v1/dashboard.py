@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.v1.deps import get_issue_service, get_project_service, get_workload_service
 from app.schemas.dashboard import (
     DashboardSummary,
+    IssueDetailResponse,
     IssueListResponse,
     MemberIssuesResponse,
     OverdueIssuesResponse,
@@ -53,6 +54,15 @@ async def get_all_issues(
 ):
     """전체 이슈 목록 (상태 그룹, 담당자, 마감일, 기한 초과 여부 포함)"""
     return await service.get_all_issues(project_id)
+
+
+@router.get("/issues/{issue_id}", response_model=IssueDetailResponse)
+async def get_issue_detail(
+    issue_id: int,
+    service: IssueService = Depends(get_issue_service),
+):
+    """단일 이슈 상세 + 변경 이력(journals) 조회"""
+    return await service.get_issue_detail(issue_id)
 
 
 @router.get("/workload", response_model=WorkloadResponse)

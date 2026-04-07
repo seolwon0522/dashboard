@@ -82,6 +82,11 @@ class RedmineClient:
 
         return all_projects
 
+    async def fetch_issue_detail(self, issue_id: int, include: str = "journals") -> dict:
+        """단일 이슈 상세 조회 (journals 포함)"""
+        data = await self._get(f"/issues/{issue_id}.json", {"include": include})
+        return data.get("issue", {})
+
     async def fetch_issue_statuses(self) -> list[dict]:
         """Redmine에 등록된 이슈 상태 목록 조회"""
         data = await self._get("/issue_statuses.json")

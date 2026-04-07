@@ -111,3 +111,43 @@ export interface DashboardFilter {
   assignee: AssigneeFilter | null
   onlyOverdue: boolean
 }
+
+// GET /api/v1/dashboard/issues/{id} 응답 내 변경 이력
+
+export interface JournalChange {
+  field: string
+  property: string
+  old_value: string | null
+  new_value: string | null
+}
+
+export interface JournalEntry {
+  id: number | null
+  user: string
+  created_on: string
+  notes: string | null
+  changes: JournalChange[]
+}
+
+export interface IssueDetail {
+  id: number
+  subject: string
+  description: string | null
+  status: string
+  status_id: number | null
+  status_group: string
+  priority: string | null
+  assigned_to: string | null
+  assigned_to_id: number | null
+  author: string | null
+  tracker: string | null
+  category: string | null
+  version: string | null
+  start_date: string | null
+  due_date: string | null
+  done_ratio: number
+  created_on: string | null
+  updated_on: string | null
+  url: string
+  journals: JournalEntry[]
+}

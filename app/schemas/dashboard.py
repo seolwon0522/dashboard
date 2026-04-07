@@ -129,3 +129,46 @@ class MemberIssuesResponse(BaseModel):
     overdue_count: int
     issues: list[MemberIssueItem]
     cached_at: datetime
+
+
+# ── 이슈 상세 ──
+
+class JournalChange(BaseModel):
+    """변경 이력 내 필드 변경"""
+    field: str
+    property: str = ""
+    old_value: str | None = None
+    new_value: str | None = None
+
+
+class JournalEntry(BaseModel):
+    """변경 이력 (저널) 항목"""
+    id: int | None = None
+    user: str = ""
+    created_on: str = ""
+    notes: str | None = None
+    changes: list[JournalChange] = []
+
+
+class IssueDetailResponse(BaseModel):
+    """GET /api/v1/dashboard/issues/{issue_id} 응답"""
+    id: int
+    subject: str
+    description: str | None = None
+    status: str
+    status_id: int | None = None
+    status_group: str = "other"
+    priority: str | None = None
+    assigned_to: str | None = None
+    assigned_to_id: int | None = None
+    author: str | None = None
+    tracker: str | None = None
+    category: str | None = None
+    version: str | None = None
+    start_date: str | None = None
+    due_date: str | None = None
+    done_ratio: int = 0
+    created_on: str | None = None
+    updated_on: str | None = None
+    url: str
+    journals: list[JournalEntry] = []

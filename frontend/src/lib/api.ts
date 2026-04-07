@@ -2,6 +2,7 @@
 // Next.js rewrites()를 통해 /api/v1/* → FastAPI로 프록시됨 (CORS 불필요)
 import type {
   DashboardSummary,
+  IssueDetail,
   IssueListResponse,
   MemberIssuesResponse,
   OverdueIssuesResponse,
@@ -73,4 +74,9 @@ export async function fetchMemberIssues(
   }
 
   return apiFetch(`${base}?${params.toString()}`)
+}
+
+// 단일 이슈 상세 + 변경 이력(journals) 조회
+export async function fetchIssueDetail(issueId: number): Promise<IssueDetail> {
+  return apiFetch(`/api/v1/dashboard/issues/${issueId}`)
 }

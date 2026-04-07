@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 
 import AttentionPanel from '@/components/AttentionPanel'
 import FilterChips from '@/components/FilterChips'
+import IssueDetailDrawer from '@/components/IssueDetailDrawer'
 import IssueTable from '@/components/IssueTable'
 import KpiRow from '@/components/KpiRow'
 import MemberModal from '@/components/MemberModal'
@@ -19,6 +20,7 @@ import {
   fetchSummary,
   fetchWorkload,
 } from '@/lib/api'
+import { formatSyncedLabel } from '@/lib/labels'
 import type {
   AssigneeFilter,
   DashboardFilter,
@@ -89,6 +91,7 @@ export default function DashboardView({ projectId, projects, projectName, onProj
   const [lastSynced, setLastSynced] = useState<Date | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [selectedMember, setSelectedMember] = useState<WorkloadItem | null>(null)
+  const [selectedIssueId, setSelectedIssueId] = useState<number | null>(null)
 
   const [filter, dispatch] = useReducer(filterReducer, EMPTY_FILTER)
 
@@ -108,9 +111,10 @@ export default function DashboardView({ projectId, projects, projectName, onProj
       .finally(() => setLoading(false))
   }, [projectId, refreshKey])
 
-  // Reset filter when project changes
+  // Reset filter and selected issue when project changes
   useEffect(() => {
     dispatch({ type: 'CLEAR_ALL' })
+    setSelectedIssueId(null)
   }, [projectId])
 
   // ── Handlers ────────────────────────────────────────────────────────────────
@@ -157,10 +161,7 @@ export default function DashboardView({ projectId, projects, projectName, onProj
 
   const syncedLabel = useMemo(() => {
     if (!lastSynced) return null
-    const diff = Math.round((Date.now() - lastSynced.getTime()) / 1000)
-    if (diff < 60) return 'just now'
-    if (diff < 3600) return `${Math.round(diff / 60)}m ago`
-    return lastSynced.toLocaleTimeString()
+    return formatSyncedLabel(lastSynced)
   }, [lastSynced])
 
   // ── Header ─────────────────────────────────────────────────────────────────
@@ -198,7 +199,7 @@ export default function DashboardView({ projectId, projects, projectName, onProj
 
         {syncedLabel && (
           <span className="text-xs text-gray-400 hidden md:inline whitespace-nowrap shrink-0">
-            Synced {syncedLabel}
+            {syncedLabel}
           </span>
         )}
 
@@ -206,7 +207,8 @@ export default function DashboardView({ projectId, projects, projectName, onProj
           type="button"
           onClick={handleRefresh}
           disabled={loading}
-          title="Refresh data"
+          title="데이터 새로고침"
+          aria-label="데이터 새로고침"
           className="p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors disabled:opacity-40 shrink-0"
         >
           <svg
@@ -276,7 +278,7 @@ export default function DashboardView({ projectId, projects, projectName, onProj
           <div className="space-y-4">
             <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
               <h2 className="px-3 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-                Assignee Workload
+                Workload
               </h2>
               {loading ? (
                 <div className="p-3 space-y-2">
@@ -324,16 +326,21 @@ export default function DashboardView({ projectId, projects, projectName, onProj
         <section className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-              All Issues
+              Issue List
             </h2>
             {issueList && (
               <span className="text-xs text-gray-400">
-                {issueList.total.toLocaleString()} total
+                {issueList.total.toLocaleString()} issues
               </span>
             )}
           </div>
           <FilterChips filter={filter} onClear={handleClearKey} onClearAll={handleClearAll} />
-          <IssueTable issues={filteredIssues} loading={loading} />
+          <IssueTable
+            issues={filteredIssues}
+            loading={loading}
+            selectedIssueId={selectedIssueId}
+            onSelectIssue={setSelectedIssueId}
+          />
         </section>
       </main>
 
@@ -345,6 +352,12 @@ export default function DashboardView({ projectId, projects, projectName, onProj
           onClose={() => setSelectedMember(null)}
         />
       )}
+
+      {/* Issue detail drawer */}
+      <IssueDetailDrawer
+        issueId={selectedIssueId}
+        onClose={() => setSelectedIssueId(null)}
+      />
     </div>
   )
 }

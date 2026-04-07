@@ -4,6 +4,7 @@ services/issue_service.py — 이슈 집계 비즈니스 로직
 """
 from collections import defaultdict
 from datetime import date, datetime
+from typing import Any
 
 from app.client.redmine_client import RedmineClient
 from app.core.cache import TTLCache
@@ -179,3 +180,82 @@ class IssueService:
             "issues": result,
             "cached_at": datetime.now(),
         }
+
+    async def get_issue_detail(self, issue_id: int) -> dict:
+        """
+        단일 이슈 상세 + 변경 이력(journals) 반환
+        Redmine API: GET /issues/{id}.json?include=journals
+        """
+        cache_key = f"issue_detail:{issue_id}"
+
+        async def _factory():
+            return await self._client.fetch_issue_detail(issue_id, include="journals")
+
+        raw = await self._cache.get_or_set(
+            cache_key,
+            _factory,
+            ttl=60,  # 상세는 짧은 TTL
+        )
+
+        base_url = self._settings.redmine.base_url
+
+        # 기본 정보 정규화
+        assigned = raw.get("assigned_to")
+        author = raw.get("author")
+        tracker = raw.get("tracker")
+        category = raw.get("category")
+        version = raw.get("fixed_version")
+        status = raw.get("status", {})
+        priority = raw.get("priority", {})
+
+        detail: dict[str, Any] = {
+            "id": raw.get("id"),
+            "subject": raw.get("subject", ""),
+            "description": raw.get("description") or None,
+            "status": status.get("name", ""),
+            "status_id": status.get("id"),
+            "status_group": self._settings.get_status_group(status.get("id", 0)) or "other",
+            "priority": priority.get("name"),
+            "assigned_to": assigned.get("name") if assigned else None,
+            "assigned_to_id": assigned.get("id") if assigned else None,
+            "author": author.get("name") if author else None,
+            "tracker": tracker.get("name") if tracker else None,
+            "category": category.get("name") if category else None,
+            "version": version.get("name") if version else None,
+            "start_date": raw.get("start_date"),
+            "due_date": raw.get("due_date"),
+            "done_ratio": raw.get("done_ratio", 0),
+            "created_on": raw.get("created_on"),
+            "updated_on": raw.get("updated_on"),
+            "url": f"{base_url}/issues/{raw.get('id')}",
+        }
+
+        # 변경 이력 (journals) 정규화
+        journals = raw.get("journals", [])
+        timeline: list[dict] = []
+        for journal in journals:
+            j_user = journal.get("user", {})
+            notes = journal.get("notes") or None
+            created = journal.get("created_on", "")
+
+            details = journal.get("details", [])
+            changes: list[dict] = []
+            for d in details:
+                changes.append({
+                    "field": d.get("name", ""),
+                    "property": d.get("property", ""),
+                    "old_value": d.get("old_value"),
+                    "new_value": d.get("new_value"),
+                })
+
+            timeline.append({
+                "id": journal.get("id"),
+                "user": j_user.get("name", ""),
+                "created_on": created,
+                "notes": notes,
+                "changes": changes,
+            })
+
+        detail["journals"] = timeline
+
+        return detail

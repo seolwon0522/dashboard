@@ -3,6 +3,7 @@
 // 전체 이슈 테이블 — 정렬, 검색, 페이지네이션, 행 클릭으로 Redmine 이동
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { IssueListItem } from '@/types/dashboard'
+import { STATUS_GROUP_BADGE, PRIORITY_BADGE, PRIORITY_ORDER, getPriorityLabel } from '@/lib/labels'
 
 type SortKey =
   | 'id'
@@ -17,32 +18,11 @@ type SortDir = 'asc' | 'desc'
 
 const PAGE_SIZE = 25
 
-const PRIORITY_ORDER: Record<string, number> = {
-  Immediate: 5,
-  Urgent: 4,
-  High: 3,
-  Normal: 2,
-  Low: 1,
-}
-
-const STATUS_GROUP_BADGE: Record<string, string> = {
-  open: 'bg-yellow-100 text-yellow-800',
-  in_progress: 'bg-blue-100 text-blue-800',
-  closed: 'bg-green-100 text-green-800',
-  other: 'bg-gray-100 text-gray-600',
-}
-
-const PRIORITY_BADGE: Record<string, string> = {
-  Immediate: 'bg-red-100 text-red-700',
-  Urgent: 'bg-orange-100 text-orange-700',
-  High: 'bg-amber-100 text-amber-700',
-  Normal: 'bg-gray-100 text-gray-500',
-  Low: 'bg-gray-50 text-gray-400',
-}
-
 interface Props {
   issues: IssueListItem[]
   loading?: boolean
+  selectedIssueId?: number | null
+  onSelectIssue?: (issueId: number) => void
 }
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -100,7 +80,7 @@ function PagBtn({ label, onClick, disabled, active }: PagBtnProps) {
   )
 }
 
-export default function IssueTable({ issues, loading }: Props) {
+export default function IssueTable({ issues, loading, selectedIssueId, onSelectIssue }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('updated_on')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [search, setSearch] = useState('')
@@ -213,13 +193,13 @@ export default function IssueTable({ issues, loading }: Props) {
               setSearch(e.target.value)
               setPage(1)
             }}
-            placeholder="Search by title, assignee, ID…"
+            placeholder="Search by subject, assignee, or issue #"
             className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 w-64"
           />
         </div>
         <span className="text-xs text-gray-400">
-          {filtered.length.toLocaleString()} issue{filtered.length !== 1 ? 's' : ''}
-          {search.trim() && ` matching "${search.trim()}"`}
+          {filtered.length.toLocaleString()} issues
+          {search.trim() && ` — results for "${search.trim()}"`}
         </span>
       </div>
 
@@ -228,12 +208,12 @@ export default function IssueTable({ issues, loading }: Props) {
         <table className="w-full text-sm min-w-[700px]">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <ThButton label="ID" sortKey="id" current={sortKey} dir={sortDir} onClick={handleSort} />
-              <ThButton label="Title" sortKey="subject" current={sortKey} dir={sortDir} onClick={handleSort} />
+              <ThButton label="Issue #" sortKey="id" current={sortKey} dir={sortDir} onClick={handleSort} />
+              <ThButton label="Subject" sortKey="subject" current={sortKey} dir={sortDir} onClick={handleSort} />
               <ThButton label="Status" sortKey="status" current={sortKey} dir={sortDir} onClick={handleSort} />
               <ThButton label="Assignee" sortKey="assigned_to" current={sortKey} dir={sortDir} onClick={handleSort} />
               <ThButton label="Priority" sortKey="priority" current={sortKey} dir={sortDir} onClick={handleSort} />
-              <ThButton label="Due" sortKey="due_date" current={sortKey} dir={sortDir} onClick={handleSort} />
+              <ThButton label="Due Date" sortKey="due_date" current={sortKey} dir={sortDir} onClick={handleSort} />
               <ThButton label="Updated" sortKey="updated_on" current={sortKey} dir={sortDir} onClick={handleSort} />
             </tr>
           </thead>
@@ -242,20 +222,22 @@ export default function IssueTable({ issues, loading }: Props) {
               <tr>
                 <td colSpan={7} className="px-4 py-14 text-center text-gray-400 text-sm">
                   {search.trim()
-                    ? `No issues match "${search.trim()}"`
-                    : 'No issues for the current filters.'}
+                    ? `No results for "${search.trim()}".`
+                    : 'No issues found.'}
                 </td>
               </tr>
             ) : (
               pageItems.map((issue) => (
                 <tr
                   key={issue.id}
-                  onClick={() => window.open(issue.url, '_blank', 'noopener,noreferrer')}
+                  onClick={() => onSelectIssue?.(issue.id)}
                   className={[
                     'cursor-pointer transition-colors group',
-                    issue.is_overdue
-                      ? 'bg-red-50 hover:bg-red-100'
-                      : 'hover:bg-blue-50',
+                    selectedIssueId === issue.id
+                      ? 'bg-blue-100 ring-1 ring-inset ring-blue-300'
+                      : issue.is_overdue
+                        ? 'bg-red-50 hover:bg-red-100'
+                        : 'hover:bg-blue-50',
                   ].join(' ')}
                 >
                   <td className="px-3 py-2.5 text-xs text-gray-400 font-mono tabular-nums whitespace-nowrap">
@@ -297,7 +279,7 @@ export default function IssueTable({ issues, loading }: Props) {
                           PRIORITY_BADGE[issue.priority] ?? 'bg-gray-100 text-gray-600'
                         }`}
                       >
-                        {issue.priority}
+                        {getPriorityLabel(issue.priority)}
                       </span>
                     ) : (
                       <span className="text-gray-300 text-xs">—</span>
@@ -333,8 +315,8 @@ export default function IssueTable({ issues, loading }: Props) {
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-3">
           <span className="text-xs text-gray-400">
-            Showing {(safePage - 1) * PAGE_SIZE + 1}–
-            {Math.min(safePage * PAGE_SIZE, sorted.length)} of {sorted.length.toLocaleString()}
+            {(safePage - 1) * PAGE_SIZE + 1}–
+            {Math.min(safePage * PAGE_SIZE, sorted.length)} / {sorted.length.toLocaleString()} issues
           </span>
           <div className="flex gap-1">
             <PagBtn disabled={safePage === 1} onClick={() => setPage(1)} label="«" />
