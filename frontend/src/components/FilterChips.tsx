@@ -1,16 +1,11 @@
 // 활성 필터 칩 표시 + 제거 컴포넌트
 import type { DashboardFilter } from '@/types/dashboard'
+import { STATUS_GROUP_LABEL } from '@/lib/labels'
 
 interface Props {
   filter: DashboardFilter
   onClear: (key: keyof DashboardFilter) => void
   onClearAll: () => void
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  closed: 'Closed',
 }
 
 export default function FilterChips({ filter, onClear, onClearAll }: Props) {
@@ -23,7 +18,7 @@ export default function FilterChips({ filter, onClear, onClearAll }: Props) {
 
       {filter.statusGroup && (
         <Chip
-          label={`Status: ${STATUS_LABELS[filter.statusGroup] ?? filter.statusGroup}`}
+          label={`Status: ${STATUS_GROUP_LABEL[filter.statusGroup] ?? filter.statusGroup}`}
           onRemove={() => onClear('statusGroup')}
         />
       )}

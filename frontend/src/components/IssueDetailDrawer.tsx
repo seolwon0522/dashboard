@@ -289,10 +289,7 @@ export default function IssueDetailDrawer({ issueId, onClose }: Props) {
       {/* Drawer 패널 */}
       <aside
         ref={panelRef}
-        className="issue-detail-drawer fixed right-0 top-0 h-full w-full sm:w-[540px] bg-white border-l border-gray-200 shadow-xl z-40 overflow-y-auto animate-slide-in"
-        style={{
-          animation: 'slideIn 0.2s ease-out',
-        }}
+        className="issue-detail-drawer fixed right-0 top-0 h-full w-full sm:w-[540px] bg-white border-l border-gray-200 shadow-xl z-40 overflow-y-auto animate-slideIn"
       >
         {/* 헤더 */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-start gap-3 z-10">
@@ -433,18 +430,6 @@ export default function IssueDetailDrawer({ issueId, onClose }: Props) {
           )}
         </div>
       </aside>
-
-      {/* Slide-in 애니메이션 */}
-      <style jsx>{`
-        @keyframes slideIn {
-          from {
-            transform: translateX(100%);
-          }
-          to {
-            transform: translateX(0);
-          }
-        }
-      `}</style>
     </>
   )
 }

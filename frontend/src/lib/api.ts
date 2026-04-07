@@ -5,7 +5,6 @@ import type {
   IssueDetail,
   IssueListResponse,
   MemberIssuesResponse,
-  OverdueIssuesResponse,
   ProjectListResponse,
   WorkloadResponse,
 } from '@/types/dashboard'
@@ -38,11 +37,6 @@ export async function fetchSummary(projectId?: string): Promise<DashboardSummary
 // 프로젝트 목록 조회 (드롭다운용)
 export async function fetchProjects(): Promise<ProjectListResponse> {
   return apiFetch('/api/v1/dashboard/projects')
-}
-
-// 기한 초과 이슈 목록 조회
-export async function fetchOverdueIssues(projectId?: string): Promise<OverdueIssuesResponse> {
-  return apiFetch(withProject('/api/v1/dashboard/issues/overdue', projectId))
 }
 
 // 담당자별 워크로드 조회

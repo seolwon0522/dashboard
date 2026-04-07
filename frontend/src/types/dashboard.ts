@@ -22,25 +22,6 @@ export interface ProjectListResponse {
   cached_at: string
 }
 
-// GET /api/v1/dashboard/issues/overdue 응답 내 항목
-export interface OverdueIssue {
-  id: number
-  subject: string
-  due_date: string
-  assigned_to: string | null
-  status: string
-  priority: string | null
-  days_overdue: number
-  url: string
-}
-
-export interface OverdueIssuesResponse {
-  project_id: string
-  count: number
-  issues: OverdueIssue[]
-  cached_at: string
-}
-
 // GET /api/v1/dashboard/workload 응답 내 항목
 export interface WorkloadItem {
   user_id: number | null

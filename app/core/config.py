@@ -25,13 +25,6 @@ class OverdueRule:
 
 
 @dataclass(frozen=True)
-class StaleRule:
-    """장기 미업데이트 판단 규칙"""
-    days_without_update: int = 14
-    exclude_status_groups: tuple[str, ...] = ("closed",)
-
-
-@dataclass(frozen=True)
 class DashboardConfig:
     """대시보드 관련 설정"""
     default_project: str
@@ -40,7 +33,6 @@ class DashboardConfig:
     # 상태 그룹: {"open": [1,2], "in_progress": [3,4], "closed": [5,6,7]}
     status_groups: dict[str, list[int]] = field(default_factory=dict)
     overdue_rule: OverdueRule = field(default_factory=OverdueRule)
-    stale_rule: StaleRule = field(default_factory=StaleRule)
 
 
 @dataclass(frozen=True)
@@ -83,19 +75,12 @@ def _parse_config(raw: dict) -> Settings:
         exclude_status_groups=tuple(overdue_raw.get("exclude_status_groups", ["closed"])),
     )
 
-    stale_raw = dash_raw.get("stale_rule", {})
-    stale_rule = StaleRule(
-        days_without_update=stale_raw.get("days_without_update", 14),
-        exclude_status_groups=tuple(stale_raw.get("exclude_status_groups", ["closed"])),
-    )
-
     dashboard = DashboardConfig(
         default_project=dash_raw["default_project"],
         include_subprojects=dash_raw.get("include_subprojects", False),
         cache_ttl_seconds=dash_raw.get("cache_ttl_seconds", 300),
         status_groups=dash_raw.get("status_groups", {}),
         overdue_rule=overdue_rule,
-        stale_rule=stale_rule,
     )
 
     return Settings(redmine=redmine, dashboard=dashboard)

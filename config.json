@@ -18,10 +18,6 @@
     "overdue_rule": {
       "field": "due_date",
       "exclude_status_groups": ["closed"]
-    },
-    "stale_rule": {
-      "days_without_update": 14,
-      "exclude_status_groups": ["closed"]
     }
   }
 }

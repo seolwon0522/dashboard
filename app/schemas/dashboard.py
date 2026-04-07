@@ -70,18 +70,6 @@ class WorkloadResponse(BaseModel):
     cached_at: datetime
 
 
-class CacheStatsResponse(BaseModel):
-    """캐시 통계 응답"""
-    total_keys: int
-    active_keys: int
-    expired_keys: int
-
-
-class CacheInvalidateResponse(BaseModel):
-    """캐시 무효화 응답"""
-    deleted: int
-
-
 # ── 담당자별 이슈 상세 ──
 
 class IssueListItem(BaseModel):

@@ -83,10 +83,13 @@ class WorkloadService:
         cache_key = f"issues:{project_id}"
 
         async def _factory():
-            return await self._client.fetch_all_issues({
+            params: dict = {
                 "project_id": project_id,
                 "status_id": "*",
-            })
+            }
+            if not self._settings.dashboard.include_subprojects:
+                params["subproject_id"] = "!*"
+            return await self._client.fetch_all_issues(params)
 
         return await self._cache.get_or_set(
             cache_key,

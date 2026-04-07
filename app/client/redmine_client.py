@@ -88,11 +88,6 @@ class RedmineClient:
         data = await self._get(f"/issues/{issue_id}.json", {"include": include})
         return data.get("issue", {})
 
-    async def fetch_issue_statuses(self) -> list[dict]:
-        """Redmine에 등록된 이슈 상태 목록 조회"""
-        data = await self._get("/issue_statuses.json")
-        return data.get("issue_statuses", [])
-
     async def fetch_asset(self, asset_url: str) -> httpx.Response:
         """Redmine 보호 리소스를 API 키로 프록시 조회"""
         parsed = urlparse(asset_url)
