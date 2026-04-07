@@ -81,10 +81,18 @@ class IssueListItem(BaseModel):
     priority: str | None = None
     assigned_to: str | None = None
     assigned_to_id: int | None = None
+    author: str | None = None
+    tracker: str | None = None
     due_date: str | None = None
+    created_on: str | None = None
     updated_on: str | None = None
+    done_ratio: int = 0
     is_overdue: bool = False
     days_overdue: int = 0
+    is_due_soon: bool = False
+    days_until_due: int | None = None
+    is_stale: bool = False
+    days_since_update: int | None = None
     url: str
 
 
@@ -136,7 +144,7 @@ class JournalEntry(BaseModel):
     created_on: str = ""
     notes: str | None = None
     notes_html: str | None = None
-    changes: list[JournalChange] = []
+    changes: list[JournalChange] = Field(default_factory=list)
 
 
 class IssueAttachment(BaseModel):
@@ -146,6 +154,14 @@ class IssueAttachment(BaseModel):
     filesize: int | None = None
     content_type: str | None = None
     content_url: str
+
+
+class RelatedIssueItem(BaseModel):
+    """이슈 상세의 관련 이슈 항목"""
+    id: int
+    label: str
+    relation_type: str = "related"
+    url: str
 
 
 class IssueDetailResponse(BaseModel):
@@ -171,5 +187,6 @@ class IssueDetailResponse(BaseModel):
     updated_on: str | None = None
     url: str
     redmine_base_url: str = ""
-    attachments: list[IssueAttachment] = []
-    journals: list[JournalEntry] = []
+    attachments: list[IssueAttachment] = Field(default_factory=list)
+    journals: list[JournalEntry] = Field(default_factory=list)
+    related_issues: list[RelatedIssueItem] = Field(default_factory=list)

@@ -16,6 +16,9 @@ from app.services.utils import calc_overdue
 
 logger = logging.getLogger(__name__)
 
+STALE_DAYS = 7
+DUE_SOON_DAYS = 7
+
 
 def _textile_to_html(text: str | None) -> str | None:
     """Textile 텍스트를 HTML로 변환. 실패 시 None 반환."""
@@ -26,6 +29,68 @@ def _textile_to_html(text: str | None) -> str | None:
     except Exception:
         logger.debug("Textile 변환 실패, 원문 반환")
         return None
+
+
+def _parse_date(date_str: str | None) -> date | None:
+    if not date_str:
+        return None
+    try:
+        return date.fromisoformat(date_str[:10])
+    except ValueError:
+        return None
+
+
+def _days_delta(target_date: str | None, today: date) -> int | None:
+    parsed = _parse_date(target_date)
+    if parsed is None:
+        return None
+    return (parsed - today).days
+
+
+def _build_related_issues(raw_issue: dict[str, Any], base_url: str) -> list[dict[str, Any]]:
+    issue_id = raw_issue.get("id")
+    related: list[dict[str, Any]] = []
+    seen: set[tuple[str, int]] = set()
+
+    parent = raw_issue.get("parent")
+    if parent and parent.get("id"):
+        parent_id = parent["id"]
+        seen.add(("parent", parent_id))
+        related.append({
+            "id": parent_id,
+            "label": parent.get("subject") or f"Parent issue #{parent_id}",
+            "relation_type": "parent",
+            "url": f"{base_url}/issues/{parent_id}",
+        })
+
+    for child in raw_issue.get("children", []):
+        child_id = child.get("id")
+        if not child_id or ("child", child_id) in seen:
+            continue
+        seen.add(("child", child_id))
+        related.append({
+            "id": child_id,
+            "label": child.get("subject") or f"Child issue #{child_id}",
+            "relation_type": "child",
+            "url": f"{base_url}/issues/{child_id}",
+        })
+
+    for relation in raw_issue.get("relations", []):
+        relation_type = relation.get("relation_type") or "related"
+        left_id = relation.get("issue_id")
+        right_id = relation.get("issue_to_id")
+        related_id = right_id if left_id == issue_id else left_id
+        if not related_id or (relation_type, related_id) in seen:
+            continue
+        seen.add((relation_type, related_id))
+        related.append({
+            "id": related_id,
+            "label": f"Issue #{related_id}",
+            "relation_type": relation_type,
+            "url": f"{base_url}/issues/{related_id}",
+        })
+
+    return related
 
 
 class IssueService:
@@ -155,6 +220,7 @@ class IssueService:
 
         today = date.today()
         base_url = self._settings.redmine.base_url
+        closed_ids = self._settings.get_excluded_status_ids(("closed",))
         overdue_exclude = self._settings.get_excluded_status_ids(
             self._settings.dashboard.overdue_rule.exclude_status_groups
         )
@@ -164,13 +230,32 @@ class IssueService:
             status_id = issue.get("status", {}).get("id")
             group = self._settings.get_status_group(status_id) or "other"
             assigned = issue.get("assigned_to")
+            author = issue.get("author")
+            tracker = issue.get("tracker")
             due_str = issue.get("due_date")
+            created_raw = issue.get("created_on") or ""
             updated_raw = issue.get("updated_on") or ""
+            days_until_due = _days_delta(due_str, today)
+            days_since_update = None
+            updated_date = _parse_date(updated_raw)
+            if updated_date is not None:
+                days_since_update = (today - updated_date).days
 
             is_overdue = False
             days_overdue = 0
             if due_str and status_id not in overdue_exclude:
                 is_overdue, days_overdue = calc_overdue(due_str, today)
+
+            is_due_soon = (
+                status_id not in closed_ids
+                and days_until_due is not None
+                and 0 <= days_until_due <= DUE_SOON_DAYS
+            )
+            is_stale = (
+                status_id not in closed_ids
+                and days_since_update is not None
+                and days_since_update >= STALE_DAYS
+            )
 
             result.append({
                 "id": issue["id"],
@@ -180,10 +265,18 @@ class IssueService:
                 "priority": issue.get("priority", {}).get("name"),
                 "assigned_to": assigned.get("name") if assigned else None,
                 "assigned_to_id": assigned.get("id") if assigned else None,
+                "author": author.get("name") if author else None,
+                "tracker": tracker.get("name") if tracker else None,
                 "due_date": due_str,
+                "created_on": created_raw[:10] if created_raw else None,
                 "updated_on": updated_raw[:10] if updated_raw else None,
+                "done_ratio": issue.get("done_ratio", 0),
                 "is_overdue": is_overdue,
                 "days_overdue": days_overdue,
+                "is_due_soon": is_due_soon,
+                "days_until_due": days_until_due,
+                "is_stale": is_stale,
+                "days_since_update": days_since_update,
                 "url": f"{base_url}/issues/{issue['id']}",
             })
 
@@ -205,7 +298,10 @@ class IssueService:
         cache_key = f"issue_detail:{issue_id}"
 
         async def _factory():
-            return await self._client.fetch_issue_detail(issue_id, include="journals,attachments")
+            return await self._client.fetch_issue_detail(
+                issue_id,
+                include="journals,attachments,relations,children",
+            )
 
         raw = await self._cache.get_or_set(
             cache_key,
@@ -247,6 +343,7 @@ class IssueService:
             "url": f"{base_url}/issues/{raw.get('id')}",
             "redmine_base_url": base_url,
             "attachments": [],
+            "related_issues": _build_related_issues(raw, base_url),
         }
 
         attachments = raw.get("attachments", [])

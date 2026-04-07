@@ -67,10 +67,18 @@ export interface IssueListItem {
   priority: string | null
   assigned_to: string | null
   assigned_to_id: number | null
+  author: string | null
+  tracker: string | null
   due_date: string | null
+  created_on: string | null
   updated_on: string | null
+  done_ratio: number
   is_overdue: boolean
   days_overdue: number
+  is_due_soon: boolean
+  days_until_due: number | null
+  is_stale: boolean
+  days_since_update: number | null
   url: string
 }
 
@@ -87,10 +95,19 @@ export interface AssigneeFilter {
   name: string
 }
 
+export type IssuePreset =
+  | 'attention'
+  | 'overdue'
+  | 'due_soon'
+  | 'stale'
+  | 'high_priority'
+  | 'unassigned'
+  | 'closed_recently'
+
 export interface DashboardFilter {
   statusGroup: string | null
   assignee: AssigneeFilter | null
-  onlyOverdue: boolean
+  preset: IssuePreset | null
 }
 
 // GET /api/v1/dashboard/issues/{id} 응답 내 변경 이력
@@ -119,6 +136,13 @@ export interface IssueAttachment {
   content_url: string
 }
 
+export interface RelatedIssue {
+  id: number
+  label: string
+  relation_type: string
+  url: string
+}
+
 export interface IssueDetail {
   id: number
   subject: string
@@ -143,4 +167,5 @@ export interface IssueDetail {
   redmine_base_url: string
   attachments: IssueAttachment[]
   journals: JournalEntry[]
+  related_issues: RelatedIssue[]
 }

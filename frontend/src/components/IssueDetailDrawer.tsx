@@ -1,60 +1,66 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { IssueAttachment, IssueDetail, JournalEntry } from '@/types/dashboard'
+import { useEffect, useMemo, useRef, useState } from 'react'
+
+import Badge from '@/components/Badge'
 import { fetchIssueDetail } from '@/lib/api'
-import { STATUS_GROUP_BADGE, PRIORITY_BADGE, getPriorityLabel } from '@/lib/labels'
+import { RELATION_LABEL, getPriorityLabel } from '@/lib/labels'
 import { buildRedmineAssetProxyUrl } from '@/lib/redmineAssets'
+import type { IssueAttachment, IssueDetail, JournalEntry } from '@/types/dashboard'
 import IssueRichContent from './IssueRichContent'
 
-// ── 필드명 한글 매핑 ──────────────────────────────────────────────────────────
-
-const FIELD_LABEL: Record<string, string> = {
-  status_id: 'Status',
-  assigned_to_id: '담당자',
-  priority_id: 'Priority',
-  due_date: 'Due date',
-  start_date: 'Start date',
-  subject: 'Subject',
-  description: 'Description',
-  done_ratio: 'Progress',
-  category_id: 'Category',
-  fixed_version_id: 'Version',
-  tracker_id: 'Tracker',
-  estimated_hours: 'Estimated hours',
-  parent_id: 'Parent issue',
-  is_private: 'Private',
-  project_id: 'Project',
+interface Props {
+  issueId: number | null
+  onClose: () => void
+  onSelectIssue: (issueId: number) => void
 }
 
-function getFieldLabel(field: string): string {
-  return FIELD_LABEL[field] ?? field
+const FIELD_LABEL: Record<string, string> = {
+  status_id: '상태',
+  assigned_to_id: '담당자',
+  priority_id: '우선순위',
+  due_date: '마감일',
+  start_date: '시작일',
+  subject: '제목',
+  description: '설명',
+  done_ratio: '진행률',
+  tracker_id: '트래커',
+}
+
+function getStatusTone(statusGroup: string) {
+  if (statusGroup === 'closed') return 'success'
+  if (statusGroup === 'in_progress') return 'info'
+  if (statusGroup === 'open') return 'warning'
+  return 'neutral'
+}
+
+function getPriorityTone(priority: string | null) {
+  if (priority === 'Immediate' || priority === 'Urgent') return 'danger'
+  if (priority === 'High') return 'warning'
+  return 'neutral'
 }
 
 function formatValue(value: string | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '미지정'
+  if (!value) return '미지정'
   return value
 }
 
-function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    return d.toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  } catch {
-    return iso
-  }
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+
+  return parsed.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
-function formatDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return '없음'
-  return dateStr
+function formatDate(value: string | null | undefined): string {
+  return value ?? '—'
 }
 
 function formatFileSize(bytes: number | null | undefined): string {
@@ -64,50 +70,15 @@ function formatFileSize(bytes: number | null | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function isLongTextChange(field: string, oldValue: string | null | undefined, newValue: string | null | undefined): boolean {
-  const textFields = new Set(['description', 'notes'])
-  if (textFields.has(field)) return true
-
-  const maxLength = Math.max(oldValue?.length ?? 0, newValue?.length ?? 0)
-  return maxLength > 120 || /\n/.test(oldValue ?? '') || /\n/.test(newValue ?? '')
-}
-
-function renderChangeLine(change: JournalEntry['changes'][number], issueUrl: string) {
-  const label = getFieldLabel(change.field)
-
-  if (change.field === 'description') {
-    return (
-      <div className="text-xs text-gray-600">
-        <span className="font-medium text-gray-500">{label}</span>
-        <span className="ml-1 text-gray-700">변경됨</span>
-        <a
-          href={issueUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-2 text-blue-500 hover:text-blue-700 hover:underline"
-        >
-          Redmine에서 확인
-        </a>
-      </div>
-    )
-  }
-
-  if (isLongTextChange(change.field, change.old_value, change.new_value)) {
-    return (
-      <div className="text-xs text-gray-600">
-        <span className="font-medium text-gray-500">{label}</span>
-        <span className="ml-1 text-gray-700">내용 변경됨</span>
-      </div>
-    )
-  }
-
+function renderChange(change: JournalEntry['changes'][number]) {
+  const label = FIELD_LABEL[change.field] ?? change.field
   return (
-    <div className="text-xs text-gray-600">
-      <span className="font-medium text-gray-500">{label}</span>
-      {': '}
-      <span className="text-gray-400">{formatValue(change.old_value)}</span>
-      <span className="mx-1 text-gray-300">→</span>
-      <span className="text-gray-700">{formatValue(change.new_value)}</span>
+    <div className="text-xs text-slate-600">
+      <span className="font-medium text-slate-500">{label}</span>
+      <span className="mx-1 text-slate-300">:</span>
+      <span className="text-slate-400">{formatValue(change.old_value)}</span>
+      <span className="mx-1 text-slate-300">→</span>
+      <span className="text-slate-800">{formatValue(change.new_value)}</span>
     </div>
   )
 }
@@ -117,25 +88,21 @@ function AttachmentList({ attachments, baseUrl }: { attachments: IssueAttachment
 
   return (
     <section>
-      <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
-        Attachments
-      </h3>
-      <div className="space-y-2">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">첨부파일</h3>
+      <div className="mt-3 space-y-2">
         {attachments.map((attachment) => (
           <a
             key={attachment.id}
             href={buildRedmineAssetProxyUrl(attachment.content_url, baseUrl)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 hover:border-blue-200 hover:bg-blue-50 transition-colors"
+            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition-colors hover:border-slate-300"
           >
             <div className="min-w-0">
-              <div className="text-sm font-medium text-gray-800 break-all">{attachment.filename}</div>
-              <div className="text-[11px] text-gray-500 mt-0.5">
-                {attachment.content_type ?? '파일'} · {formatFileSize(attachment.filesize)}
-              </div>
+              <div className="truncate font-medium text-slate-800">{attachment.filename}</div>
+              <div className="mt-1 text-xs text-slate-500">{attachment.content_type ?? '파일'} • {formatFileSize(attachment.filesize)}</div>
             </div>
-            <span className="shrink-0 text-xs text-blue-600">열기</span>
+            <span className="text-xs font-medium text-slate-500">열기</span>
           </a>
         ))}
       </div>
@@ -143,62 +110,41 @@ function AttachmentList({ attachments, baseUrl }: { attachments: IssueAttachment
   )
 }
 
-// ── 변경 이력 타임라인 ────────────────────────────────────────────────────────
-
-function JournalTimeline({ journals, baseUrl, issueUrl }: { journals: JournalEntry[]; baseUrl: string; issueUrl: string }) {
-  if (journals.length === 0) {
-    return (
-      <p className="text-sm text-gray-400 py-4 text-center">변경 이력이 없습니다</p>
-    )
-  }
-
-  // 시간 역순 정렬
+function JournalTimeline({ journals, baseUrl }: { journals: JournalEntry[]; baseUrl: string }) {
   const sorted = [...journals].reverse()
 
-  return (
-    <div className="space-y-0">
-      {sorted.map((j, idx) => {
-        const hasChanges = j.changes.length > 0
-        const hasNotes = !!j.notes
+  if (sorted.length === 0) {
+    return <div className="rounded-xl border border-dashed border-slate-200 px-3 py-5 text-sm text-slate-400">이슈 이력이 없습니다.</div>
+  }
 
-        if (!hasChanges && !hasNotes) return null
+  return (
+    <div className="space-y-4">
+      {sorted.map((journal, index) => {
+        if (!journal.notes && journal.changes.length === 0) return null
 
         return (
-          <div key={j.id ?? idx} className="relative pl-5 pb-4 border-l-2 border-gray-200 last:border-l-0">
-            {/* 타임라인 도트 */}
-            <div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-blue-400" />
+          <div key={journal.id ?? index} className="relative pl-5">
+            <div className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-slate-300" />
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium text-slate-800">{journal.user || '시스템'}</div>
+                <div className="text-[11px] text-slate-400">{formatDateTime(journal.created_on)}</div>
+              </div>
 
-            {/* 헤더: 시간 + 작성자 */}
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] text-gray-400 tabular-nums">
-                {formatDateTime(j.created_on)}
-              </span>
-              <span className="text-xs font-medium text-gray-600">{j.user || '시스템'}</span>
-            </div>
-
-            {/* 필드 변경 */}
-            {hasChanges && (
-              <div className="bg-gray-50 rounded px-2.5 py-1.5 mb-1.5">
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">변경 사항</span>
-                <div className="space-y-0.5">
-                  {j.changes.map((c, ci) => (
-                    <div key={ci}>{renderChangeLine(c, issueUrl)}</div>
+              {journal.changes.length > 0 ? (
+                <div className="mt-3 space-y-1 rounded-lg bg-slate-50 px-3 py-2">
+                  {journal.changes.map((change, changeIndex) => (
+                    <div key={`${journal.id ?? index}-${changeIndex}`}>{renderChange(change)}</div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : null}
 
-            {/* 코멘트/메모 — rich content 렌더링 */}
-            {hasNotes && (
-              <div className="issue-history-note mt-1 bg-yellow-50 border border-yellow-100 rounded px-2.5 py-2">
-                <span className="text-[10px] font-semibold text-yellow-600 uppercase tracking-wide block mb-1">Note</span>
-                <IssueRichContent
-                  html={j.notes_html}
-                  raw={j.notes}
-                  baseUrl={baseUrl}
-                />
-              </div>
-            )}
+              {journal.notes ? (
+                <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-3">
+                  <IssueRichContent html={journal.notes_html} raw={journal.notes} baseUrl={baseUrl} />
+                </div>
+              ) : null}
+            </div>
           </div>
         )
       })}
@@ -206,50 +152,126 @@ function JournalTimeline({ journals, baseUrl, issueUrl }: { journals: JournalEnt
   )
 }
 
-// ── Key-Value 행 ──────────────────────────────────────────────────────────────
+function InfoGrid({ detail }: { detail: IssueDetail }) {
+  const items = [
+    { label: '담당자', value: detail.assigned_to ?? '미할당' },
+    { label: '작성자', value: detail.author ?? '미상' },
+    { label: '트래커', value: detail.tracker ?? '—' },
+    { label: '카테고리', value: detail.category ?? '—' },
+    { label: '버전', value: detail.version ?? '—' },
+    { label: '시작일', value: formatDate(detail.start_date) },
+    { label: '마감일', value: formatDate(detail.due_date) },
+    { label: '생성일', value: formatDateTime(detail.created_on) },
+    { label: '수정일', value: formatDateTime(detail.updated_on) },
+  ]
 
-function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-start py-1.5 text-sm">
-      <span className="w-24 shrink-0 text-gray-400 text-xs font-medium">{label}</span>
-      <span className="text-gray-700 text-xs break-all">{children}</span>
+    <div className="grid gap-3 sm:grid-cols-2">
+      {items.map((item) => (
+        <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</div>
+          <div className="mt-1 text-sm text-slate-800">{item.value}</div>
+        </div>
+      ))}
     </div>
   )
 }
 
-// ── 메인 Drawer ───────────────────────────────────────────────────────────────
+function RelatedIssues({ detail, onSelectIssue }: { detail: IssueDetail; onSelectIssue: (issueId: number) => void }) {
+  if (detail.related_issues.length === 0) return null
 
-interface Props {
-  issueId: number | null
-  onClose: () => void
+  return (
+    <section>
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">관련 이슈</h3>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {detail.related_issues.map((related) => (
+          <button
+            key={`${related.relation_type}-${related.id}`}
+            type="button"
+            onClick={() => onSelectIssue(related.id)}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left transition-colors hover:border-slate-300 hover:bg-white"
+          >
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {RELATION_LABEL[related.relation_type] ?? related.relation_type}
+            </div>
+            <div className="mt-1 text-sm font-medium text-slate-800">#{related.id}</div>
+            <div className="mt-1 text-xs text-slate-500">{related.label}</div>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
 }
 
-export default function IssueDetailDrawer({ issueId, onClose }: Props) {
+function RecentOperationalChanges({ journals }: { journals: JournalEntry[] }) {
+  const changes = useMemo(() => {
+    return [...journals]
+      .reverse()
+      .flatMap((journal) => {
+        return journal.changes
+          .filter((change) => ['status_id', 'assigned_to_id', 'priority_id', 'due_date'].includes(change.field))
+          .map((change) => ({
+            label: FIELD_LABEL[change.field] ?? change.field,
+            createdOn: journal.created_on,
+            user: journal.user,
+            oldValue: formatValue(change.old_value),
+            newValue: formatValue(change.new_value),
+          }))
+      })
+      .slice(0, 4)
+  }, [journals])
+
+  if (changes.length === 0) return null
+
+  return (
+    <section>
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">최근 운영 변경</h3>
+      <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+        {changes.map((change, index) => (
+          <div key={`${change.label}-${index}`} className="text-sm text-slate-700">
+            <span className="font-medium text-slate-900">{change.label}</span>
+            <span className="mx-1 text-slate-300">·</span>
+            <span className="text-slate-500">{change.user || '시스템'}</span>
+            <span className="mx-1 text-slate-300">·</span>
+            <span className="text-slate-500">{formatDateTime(change.createdOn)}</span>
+            <div className="mt-1 text-xs text-slate-500">{change.oldValue} → {change.newValue}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export default function IssueDetailDrawer({ issueId, onClose, onSelectIssue }: Props) {
   const [detail, setDetail] = useState<IssueDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const cacheRef = useRef<Map<number, IssueDetail>>(new Map())
   const panelRef = useRef<HTMLDivElement>(null)
 
-  // ESC 키로 닫기
   useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose()
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
     }
+
     if (issueId !== null) {
-      document.addEventListener('keydown', handleKeyDown)
-      return () => document.removeEventListener('keydown', handleKeyDown)
+      document.addEventListener('keydown', onKeyDown)
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.removeEventListener('keydown', onKeyDown)
+        document.body.style.overflow = ''
+      }
     }
+
+    return undefined
   }, [issueId, onClose])
 
-  // 이슈 상세 조회
   useEffect(() => {
     if (issueId === null) {
       setDetail(null)
       return
     }
 
-    // 캐시 히트
     const cached = cacheRef.current.get(issueId)
     if (cached) {
       setDetail(cached)
@@ -261,15 +283,14 @@ export default function IssueDetailDrawer({ issueId, onClose }: Props) {
     setError(null)
 
     fetchIssueDetail(issueId)
-      .then((d) => {
-        cacheRef.current.set(issueId, d)
-        setDetail(d)
+      .then((response) => {
+        cacheRef.current.set(issueId, response)
+        setDetail(response)
       })
-      .catch((err: Error) => setError(err.message))
+      .catch((fetchError: Error) => setError(fetchError.message))
       .finally(() => setLoading(false))
   }, [issueId])
 
-  // 패널이 열릴 때 스크롤 최상단으로
   useEffect(() => {
     if (detail && panelRef.current) {
       panelRef.current.scrollTop = 0
@@ -280,154 +301,96 @@ export default function IssueDetailDrawer({ issueId, onClose }: Props) {
 
   return (
     <>
-      {/* 백드롭 (모바일 대응) */}
-      <div
-        className="fixed inset-0 bg-black/10 z-30 lg:hidden"
-        onClick={onClose}
-      />
-
-      {/* Drawer 패널 */}
+      <div className="fixed inset-0 z-30 bg-slate-900/20" onClick={onClose} />
       <aside
         ref={panelRef}
-        className="issue-detail-drawer fixed right-0 top-0 h-full w-full sm:w-[540px] bg-white border-l border-gray-200 shadow-xl z-40 overflow-y-auto animate-slideIn"
+        className="fixed right-0 top-0 z-40 h-full w-full overflow-y-auto border-l border-slate-200 bg-white shadow-2xl sm:w-[620px]"
       >
-        {/* 헤더 */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-start gap-3 z-10">
-          <div className="flex-1 min-w-0">
-            {loading ? (
-              <div className="space-y-2">
-                <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
-                <div className="h-5 w-48 bg-gray-200 rounded animate-pulse" />
-              </div>
-            ) : detail ? (
-              <>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono text-gray-400">#{detail.id}</span>
-                  <span
-                    className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                      STATUS_GROUP_BADGE[detail.status_group] ?? 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {detail.status}
-                  </span>
+        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              {loading && !detail ? (
+                <div className="space-y-2">
+                  <div className="h-4 w-16 animate-pulse rounded bg-slate-200" />
+                  <div className="h-5 w-60 animate-pulse rounded bg-slate-200" />
                 </div>
-                <h2 className="text-sm font-bold text-gray-800 leading-snug break-words">
-                  {detail.subject}
-                </h2>
-              </>
-            ) : null}
-          </div>
+              ) : detail ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-xs font-semibold text-slate-400">#{detail.id}</div>
+                    <Badge tone={getStatusTone(detail.status_group)}>{detail.status}</Badge>
+                    {detail.priority ? <Badge tone={getPriorityTone(detail.priority)}>{getPriorityLabel(detail.priority)}</Badge> : null}
+                    <Badge tone="neutral">진행 {detail.done_ratio}%</Badge>
+                  </div>
+                  <h2 className="mt-3 text-lg font-semibold leading-tight text-slate-900">{detail.subject}</h2>
+                </>
+              ) : null}
+            </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-            title="닫기"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+            <div className="flex items-center gap-2">
+              {detail ? (
+                <a
+                  href={detail.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
+                >
+                  Redmine에서 보기
+                </a>
+              ) : null}
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* 본문 */}
-        <div className="px-4 py-3 space-y-4">
-          {loading && (
-            <div className="space-y-3 py-8">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="h-3 w-20 bg-gray-100 rounded animate-pulse" />
-                  <div className="h-3 w-32 bg-gray-100 rounded animate-pulse" />
-                </div>
+        <div className="space-y-6 px-5 py-5">
+          {loading && !detail ? (
+            <div className="space-y-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="h-16 animate-pulse rounded-xl bg-slate-100" />
               ))}
             </div>
-          )}
+          ) : null}
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-xs">
-              <p className="font-semibold">이슈 상세를 불러올 수 없습니다</p>
-              <p className="mt-1 text-red-500">{error}</p>
+          {error ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-4 text-sm text-rose-700">
+              이슈 상세를 불러오지 못했습니다: {error}
             </div>
-          )}
+          ) : null}
 
-          {!loading && !error && !detail && (
-            <p className="text-sm text-gray-400 text-center py-8">이슈 정보가 없습니다</p>
-          )}
-
-          {!loading && detail && (
+          {!loading && !error && detail ? (
             <>
-              {/* 원본 보기 링크 */}
-              <a
-                href={detail.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-blue-500 hover:text-blue-700 hover:underline transition-colors"
-              >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-                Redmine에서 보기
-              </a>
+              <InfoGrid detail={detail} />
+              <RecentOperationalChanges journals={detail.journals} />
+              <RelatedIssues detail={detail} onSelectIssue={onSelectIssue} />
 
-              {/* 기본 정보 */}
               <section>
-                <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
-                  Detail
-                </h3>
-                <div className="divide-y divide-gray-50">
-                  <InfoRow label="담당자">{detail.assigned_to ?? '미지정'}</InfoRow>
-                  <InfoRow label="작성자">{detail.author ?? '미지정'}</InfoRow>
-                  <InfoRow label="Priority">
-                    {detail.priority ? (
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                          PRIORITY_BADGE[detail.priority] ?? 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {getPriorityLabel(detail.priority)}
-                      </span>
-                    ) : '미지정'}
-                  </InfoRow>
-                  {detail.tracker && <InfoRow label="Tracker">{detail.tracker}</InfoRow>}
-                  {detail.category && <InfoRow label="Category">{detail.category}</InfoRow>}
-                  {detail.version && <InfoRow label="Version">{detail.version}</InfoRow>}
-                  <InfoRow label="시작일">{formatDate(detail.start_date)}</InfoRow>
-                  <InfoRow label="마감일">{formatDate(detail.due_date)}</InfoRow>
-                  <InfoRow label="Progress">{detail.done_ratio}%</InfoRow>
-                  <InfoRow label="생성일">{formatDateTime(detail.created_on)}</InfoRow>
-                  <InfoRow label="최근 수정일">{formatDateTime(detail.updated_on)}</InfoRow>
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">설명</h3>
+                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <IssueRichContent
+                    html={detail.description_html}
+                    raw={detail.description}
+                    baseUrl={detail.redmine_base_url}
+                  />
                 </div>
-              </section>
-
-              {/* 설명 */}
-              <section>
-                <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
-                  Description
-                </h3>
-                {(detail.description || detail.description_html) ? (
-                  <div className="bg-gray-50 rounded p-3 max-h-[50vh] overflow-y-auto">
-                    <IssueRichContent
-                      html={detail.description_html}
-                      raw={detail.description}
-                      baseUrl={detail.redmine_base_url}
-                    />
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400">설명 없음</p>
-                )}
               </section>
 
               <AttachmentList attachments={detail.attachments} baseUrl={detail.redmine_base_url} />
 
-              {/* 변경 이력 */}
               <section>
-                <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
-                  History
-                </h3>
-                <JournalTimeline journals={detail.journals} baseUrl={detail.redmine_base_url} issueUrl={detail.url} />
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">이력</h3>
+                <div className="mt-3">
+                  <JournalTimeline journals={detail.journals} baseUrl={detail.redmine_base_url} />
+                </div>
               </section>
             </>
-          )}
+          ) : null}
         </div>
       </aside>
     </>

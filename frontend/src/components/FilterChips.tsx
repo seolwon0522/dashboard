@@ -1,6 +1,6 @@
 // 활성 필터 칩 표시 + 제거 컴포넌트
 import type { DashboardFilter } from '@/types/dashboard'
-import { STATUS_GROUP_LABEL } from '@/lib/labels'
+import { ISSUE_PRESET_LABEL, STATUS_GROUP_LABEL } from '@/lib/labels'
 
 interface Props {
   filter: DashboardFilter
@@ -9,29 +9,33 @@ interface Props {
 }
 
 export default function FilterChips({ filter, onClear, onClearAll }: Props) {
-  const hasAny = filter.statusGroup !== null || filter.assignee !== null || filter.onlyOverdue
+  const hasAny = filter.statusGroup !== null || filter.assignee !== null || filter.preset !== null
   if (!hasAny) return null
 
   return (
     <div className="flex flex-wrap items-center gap-2 mb-3">
-      <span className="text-xs text-gray-400 font-medium shrink-0">Filters:</span>
+      <span className="text-xs text-gray-400 font-medium shrink-0">필터:</span>
 
       {filter.statusGroup && (
         <Chip
-          label={`Status: ${STATUS_GROUP_LABEL[filter.statusGroup] ?? filter.statusGroup}`}
+          label={`상태: ${STATUS_GROUP_LABEL[filter.statusGroup] ?? filter.statusGroup}`}
           onRemove={() => onClear('statusGroup')}
         />
       )}
 
       {filter.assignee && (
         <Chip
-          label={`Assignee: ${filter.assignee.name}`}
+          label={`담당자: ${filter.assignee.name}`}
           onRemove={() => onClear('assignee')}
         />
       )}
 
-      {filter.onlyOverdue && (
-        <Chip label="Overdue only" onRemove={() => onClear('onlyOverdue')} color="red" />
+      {filter.preset && (
+        <Chip
+          label={`큐: ${ISSUE_PRESET_LABEL[filter.preset] ?? filter.preset}`}
+          onRemove={() => onClear('preset')}
+          color="red"
+        />
       )}
 
       <button
@@ -39,7 +43,7 @@ export default function FilterChips({ filter, onClear, onClearAll }: Props) {
         onClick={onClearAll}
         className="text-xs text-gray-400 hover:text-gray-600 underline ml-1 shrink-0"
       >
-        Clear all
+        전체 해제
       </button>
     </div>
   )
@@ -67,7 +71,7 @@ function Chip({
         type="button"
         onClick={onRemove}
         className="ml-0.5 hover:opacity-70 focus:outline-none leading-none"
-        aria-label={`Remove ${label} filter`}
+        aria-label={`${label} 필터 제거`}
       >
         ×
       </button>
