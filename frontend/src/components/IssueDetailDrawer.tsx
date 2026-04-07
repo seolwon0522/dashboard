@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { IssueDetail, JournalEntry } from '@/types/dashboard'
+import type { IssueAttachment, IssueDetail, JournalEntry } from '@/types/dashboard'
 import { fetchIssueDetail } from '@/lib/api'
 import { STATUS_GROUP_BADGE, PRIORITY_BADGE, getPriorityLabel } from '@/lib/labels'
+import { buildRedmineAssetProxyUrl } from '@/lib/redmineAssets'
+import IssueRichContent from './IssueRichContent'
 
 // ── 필드명 한글 매핑 ──────────────────────────────────────────────────────────
 
@@ -55,9 +57,95 @@ function formatDate(dateStr: string | null | undefined): string {
   return dateStr
 }
 
+function formatFileSize(bytes: number | null | undefined): string {
+  if (!bytes || bytes <= 0) return '크기 정보 없음'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function isLongTextChange(field: string, oldValue: string | null | undefined, newValue: string | null | undefined): boolean {
+  const textFields = new Set(['description', 'notes'])
+  if (textFields.has(field)) return true
+
+  const maxLength = Math.max(oldValue?.length ?? 0, newValue?.length ?? 0)
+  return maxLength > 120 || /\n/.test(oldValue ?? '') || /\n/.test(newValue ?? '')
+}
+
+function renderChangeLine(change: JournalEntry['changes'][number], issueUrl: string) {
+  const label = getFieldLabel(change.field)
+
+  if (change.field === 'description') {
+    return (
+      <div className="text-xs text-gray-600">
+        <span className="font-medium text-gray-500">{label}</span>
+        <span className="ml-1 text-gray-700">변경됨</span>
+        <a
+          href={issueUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-2 text-blue-500 hover:text-blue-700 hover:underline"
+        >
+          Redmine에서 확인
+        </a>
+      </div>
+    )
+  }
+
+  if (isLongTextChange(change.field, change.old_value, change.new_value)) {
+    return (
+      <div className="text-xs text-gray-600">
+        <span className="font-medium text-gray-500">{label}</span>
+        <span className="ml-1 text-gray-700">내용 변경됨</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="text-xs text-gray-600">
+      <span className="font-medium text-gray-500">{label}</span>
+      {': '}
+      <span className="text-gray-400">{formatValue(change.old_value)}</span>
+      <span className="mx-1 text-gray-300">→</span>
+      <span className="text-gray-700">{formatValue(change.new_value)}</span>
+    </div>
+  )
+}
+
+function AttachmentList({ attachments, baseUrl }: { attachments: IssueAttachment[]; baseUrl: string }) {
+  if (attachments.length === 0) return null
+
+  return (
+    <section>
+      <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
+        Attachments
+      </h3>
+      <div className="space-y-2">
+        {attachments.map((attachment) => (
+          <a
+            key={attachment.id}
+            href={buildRedmineAssetProxyUrl(attachment.content_url, baseUrl)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 hover:border-blue-200 hover:bg-blue-50 transition-colors"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-gray-800 break-all">{attachment.filename}</div>
+              <div className="text-[11px] text-gray-500 mt-0.5">
+                {attachment.content_type ?? '파일'} · {formatFileSize(attachment.filesize)}
+              </div>
+            </div>
+            <span className="shrink-0 text-xs text-blue-600">열기</span>
+          </a>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 // ── 변경 이력 타임라인 ────────────────────────────────────────────────────────
 
-function JournalTimeline({ journals }: { journals: JournalEntry[] }) {
+function JournalTimeline({ journals, baseUrl, issueUrl }: { journals: JournalEntry[]; baseUrl: string; issueUrl: string }) {
   if (journals.length === 0) {
     return (
       <p className="text-sm text-gray-400 py-4 text-center">변경 이력이 없습니다</p>
@@ -90,24 +178,25 @@ function JournalTimeline({ journals }: { journals: JournalEntry[] }) {
 
             {/* 필드 변경 */}
             {hasChanges && (
-              <div className="space-y-0.5 mb-1">
-                {j.changes.map((c, ci) => (
-                  <div key={ci} className="text-xs text-gray-600">
-                    <span className="font-medium text-gray-500">{getFieldLabel(c.field)}</span>
-                    {': '}
-                    <span className="text-gray-400">{formatValue(c.old_value)}</span>
-                    <span className="mx-1 text-gray-300">→</span>
-                    <span className="text-gray-700">{formatValue(c.new_value)}</span>
-                  </div>
-                ))}
+              <div className="bg-gray-50 rounded px-2.5 py-1.5 mb-1.5">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">변경 사항</span>
+                <div className="space-y-0.5">
+                  {j.changes.map((c, ci) => (
+                    <div key={ci}>{renderChangeLine(c, issueUrl)}</div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* 코멘트/메모 */}
+            {/* 코멘트/메모 — rich content 렌더링 */}
             {hasNotes && (
-              <div className="mt-1 bg-yellow-50 border border-yellow-100 rounded px-2.5 py-1.5 text-xs text-gray-700 whitespace-pre-wrap break-words">
-                <span className="text-[10px] font-semibold text-yellow-600 uppercase tracking-wide block mb-0.5">Note</span>
-                {j.notes}
+              <div className="issue-history-note mt-1 bg-yellow-50 border border-yellow-100 rounded px-2.5 py-2">
+                <span className="text-[10px] font-semibold text-yellow-600 uppercase tracking-wide block mb-1">Note</span>
+                <IssueRichContent
+                  html={j.notes_html}
+                  raw={j.notes}
+                  baseUrl={baseUrl}
+                />
               </div>
             )}
           </div>
@@ -200,7 +289,7 @@ export default function IssueDetailDrawer({ issueId, onClose }: Props) {
       {/* Drawer 패널 */}
       <aside
         ref={panelRef}
-        className="fixed right-0 top-0 h-full w-full sm:w-[440px] bg-white border-l border-gray-200 shadow-xl z-40 overflow-y-auto animate-slide-in"
+        className="issue-detail-drawer fixed right-0 top-0 h-full w-full sm:w-[540px] bg-white border-l border-gray-200 shadow-xl z-40 overflow-y-auto animate-slide-in"
         style={{
           animation: 'slideIn 0.2s ease-out',
         }}
@@ -318,21 +407,27 @@ export default function IssueDetailDrawer({ issueId, onClose }: Props) {
                 <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
                   Description
                 </h3>
-                {detail.description ? (
-                  <div className="text-xs text-gray-700 whitespace-pre-wrap break-words bg-gray-50 rounded p-2.5 max-h-48 overflow-y-auto">
-                    {detail.description}
+                {(detail.description || detail.description_html) ? (
+                  <div className="bg-gray-50 rounded p-3 max-h-[50vh] overflow-y-auto">
+                    <IssueRichContent
+                      html={detail.description_html}
+                      raw={detail.description}
+                      baseUrl={detail.redmine_base_url}
+                    />
                   </div>
                 ) : (
                   <p className="text-xs text-gray-400">설명 없음</p>
                 )}
               </section>
 
+              <AttachmentList attachments={detail.attachments} baseUrl={detail.redmine_base_url} />
+
               {/* 변경 이력 */}
               <section>
                 <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2 border-b border-gray-100 pb-1">
                   History
                 </h3>
-                <JournalTimeline journals={detail.journals} />
+                <JournalTimeline journals={detail.journals} baseUrl={detail.redmine_base_url} issueUrl={detail.url} />
               </section>
             </>
           )}

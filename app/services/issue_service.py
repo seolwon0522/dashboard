@@ -2,14 +2,30 @@
 services/issue_service.py — 이슈 집계 비즈니스 로직
 상태 그룹 분류, overdue 판단, 요약 통계 생성
 """
+import logging
 from collections import defaultdict
 from datetime import date, datetime
 from typing import Any
+
+import textile
 
 from app.client.redmine_client import RedmineClient
 from app.core.cache import TTLCache
 from app.core.config import Settings
 from app.services.utils import calc_overdue
+
+logger = logging.getLogger(__name__)
+
+
+def _textile_to_html(text: str | None) -> str | None:
+    """Textile 텍스트를 HTML로 변환. 실패 시 None 반환."""
+    if not text:
+        return None
+    try:
+        return textile.textile(text)
+    except Exception:
+        logger.debug("Textile 변환 실패, 원문 반환")
+        return None
 
 
 class IssueService:
@@ -189,7 +205,7 @@ class IssueService:
         cache_key = f"issue_detail:{issue_id}"
 
         async def _factory():
-            return await self._client.fetch_issue_detail(issue_id, include="journals")
+            return await self._client.fetch_issue_detail(issue_id, include="journals,attachments")
 
         raw = await self._cache.get_or_set(
             cache_key,
@@ -212,6 +228,7 @@ class IssueService:
             "id": raw.get("id"),
             "subject": raw.get("subject", ""),
             "description": raw.get("description") or None,
+            "description_html": _textile_to_html(raw.get("description")),
             "status": status.get("name", ""),
             "status_id": status.get("id"),
             "status_group": self._settings.get_status_group(status.get("id", 0)) or "other",
@@ -228,7 +245,22 @@ class IssueService:
             "created_on": raw.get("created_on"),
             "updated_on": raw.get("updated_on"),
             "url": f"{base_url}/issues/{raw.get('id')}",
+            "redmine_base_url": base_url,
+            "attachments": [],
         }
+
+        attachments = raw.get("attachments", [])
+        detail["attachments"] = [
+            {
+                "id": attachment.get("id"),
+                "filename": attachment.get("filename", "attachment"),
+                "filesize": attachment.get("filesize"),
+                "content_type": attachment.get("content_type"),
+                "content_url": attachment.get("content_url", ""),
+            }
+            for attachment in attachments
+            if attachment.get("id") and attachment.get("content_url")
+        ]
 
         # 변경 이력 (journals) 정규화
         journals = raw.get("journals", [])
@@ -253,6 +285,7 @@ class IssueService:
                 "user": j_user.get("name", ""),
                 "created_on": created,
                 "notes": notes,
+                "notes_html": _textile_to_html(notes),
                 "changes": changes,
             })
 

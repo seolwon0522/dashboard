@@ -126,13 +126,23 @@ export interface JournalEntry {
   user: string
   created_on: string
   notes: string | null
+  notes_html: string | null
   changes: JournalChange[]
+}
+
+export interface IssueAttachment {
+  id: number
+  filename: string
+  filesize: number | null
+  content_type: string | null
+  content_url: string
 }
 
 export interface IssueDetail {
   id: number
   subject: string
   description: string | null
+  description_html: string | null
   status: string
   status_id: number | null
   status_group: string
@@ -149,5 +159,7 @@ export interface IssueDetail {
   created_on: string | null
   updated_on: string | null
   url: string
+  redmine_base_url: string
+  attachments: IssueAttachment[]
   journals: JournalEntry[]
 }

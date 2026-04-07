@@ -44,6 +44,7 @@ Redmine 프로젝트 관리 시스템의 이슈 데이터를 실시간으로 집
 | FastAPI | 0.115.0 | API 프레임워크 |
 | Uvicorn | 0.30.0 | ASGI 서버 |
 | httpx | 0.27.0 | 비동기 HTTP 클라이언트 (Redmine API 호출) |
+| textile | 4.0.3 | Redmine 본문(Textile) HTML 변환 |
 | Pydantic v2 | FastAPI 내장 | 응답 스키마 직렬화 / 검증 |
 
 ### 프론트엔드
@@ -54,6 +55,8 @@ Redmine 프로젝트 관리 시스템의 이슈 데이터를 실시간으로 집
 | React | 18.3+ | UI 렌더링 |
 | TypeScript | 5.x | 타입 안전성 |
 | Tailwind CSS | 3.4+ | 스타일링 (외부 차트 라이브러리 미사용) |
+| DOMPurify | 3.3.3 | 이슈 본문 HTML sanitize |
+| marked | 17.x | markdown fallback 렌더링 |
 
 ---
 
@@ -83,7 +86,7 @@ dashboard/
 │   ├── api/                           # HTTP 수신 계층
 │   │   └── v1/
 │   │       ├── router.py              # v1 라우터 통합 등록
-│   │       ├── dashboard.py           # 6개 대시보드 엔드포인트
+│   │       ├── dashboard.py           # 대시보드 + Redmine asset 프록시 엔드포인트
 │   │       └── deps.py                # FastAPI Depends 의존성 주입
 │   │
 │   └── schemas/
@@ -110,7 +113,8 @@ dashboard/
         │   ├── StatusDistribution.tsx # 상태 분포 위젯 (클릭 시 이슈 테이블 필터)
         │   ├── AttentionPanel.tsx     # 주의 이슈 패널 (Overdue / Due Soon / High Priority 탭)
         │   ├── IssueTable.tsx         # 전체 이슈 테이블 (정렬·검색·페이지네이션·행 선택)
-        │   ├── IssueDetailDrawer.tsx  # 선택 이슈 상세 패널 (기본 정보 + 설명 + 변경 이력)
+        │   ├── IssueDetailDrawer.tsx  # 선택 이슈 상세 패널 (rich description + 첨부파일 + 변경 이력)
+        │   ├── IssueRichContent.tsx   # Redmine HTML / markdown / plain text 렌더링 전용 컴포넌트
         │   ├── WorkloadBar.tsx        # 담당자별 워크로드 컴팩트 테이블 (클릭 시 필터)
         │   ├── SummaryCard.tsx        # KPI 카드 기본 컴포넌트 (레거시, 유지)
         │   ├── OverdueTable.tsx       # 기한 초과 이슈 테이블 (레거시, 유지)
@@ -119,7 +123,8 @@ dashboard/
         │
         ├── lib/
         │   ├── api.ts                 # API 호출 함수 모음
-        │   └── labels.ts              # 공통 상태/우선순위/동기화 라벨 상수
+        │   ├── labels.ts              # 공통 상태/우선순위/동기화 라벨 상수
+        │   └── redmineAssets.ts       # Redmine 상대경로/첨부 리소스 URL 보정 및 프록시 헬퍼
         │
         └── types/
             └── dashboard.ts           # TypeScript 타입 정의 (백엔드 스키마와 1:1)
@@ -175,6 +180,18 @@ Service 계층  services/{issue,project,workload}_service.py
   │  Pydantic 모델로 직렬화
   ▼
 JSON 응답  →  Next.js 컴포넌트 렌더링
+
+별도 리소스 흐름:
+
+브라우저 내 본문 이미지 / 첨부 링크
+  │
+  │  /api/v1/dashboard/assets?url=...
+  ▼
+FastAPI asset 프록시
+  │
+  │  X-Redmine-API-Key 포함
+  ▼
+Redmine 보호 리소스 (attachments / uploads)
 ```
 
 ### 캐시 공유 전략
@@ -229,7 +246,7 @@ JSON 응답  →  Next.js 컴포넌트 렌더링
 - **Status Distribution 행 클릭** → 해당 상태 그룹으로 이슈 테이블 필터링
 - **FilterChips** → 활성 필터 확인 및 개별 제거 / Clear all
 - **IssueTable 행 클릭** → 우측 이슈 상세 패널 열기
-- **이슈 상세 패널** → 기본 정보 / 설명 / 변경 이력 확인, 필요 시 Redmine 원본 링크 열기
+- **이슈 상세 패널** → 기본 정보 / rich description / 첨부파일 / 변경 이력 확인, 필요 시 Redmine 원본 링크 열기
 - **IssueTable 컬럼 헤더 클릭** → 오름차순/내림차순 정렬 토글
 - **헤더 ↺ 버튼** → 전체 데이터 수동 새로고침 (모든 캐시 재조회)
 - **헤더 드롭다운** → 프로젝트 전환 (URL 변경, 필터 초기화)
@@ -295,10 +312,11 @@ npm run dev
 | `GET` | `/api/v1/dashboard/summary` | 이슈 전체 요약 통계 |
 | `GET` | `/api/v1/dashboard/projects` | 전체 프로젝트 목록 + open 이슈 수 |
 | `GET` | `/api/v1/dashboard/issues` | **전체 이슈 목록** (상태 그룹·담당자·기한 초과 여부 포함) |
-| `GET` | `/api/v1/dashboard/issues/{issue_id}` | **단일 이슈 상세 + journals 변경 이력** |
+| `GET` | `/api/v1/dashboard/issues/{issue_id}` | **단일 이슈 상세 + rich 본문용 HTML + journals + attachments** |
 | `GET` | `/api/v1/dashboard/issues/overdue` | 기한 초과 이슈 목록 |
 | `GET` | `/api/v1/dashboard/workload` | 담당자별 워크로드 |
 | `GET` | `/api/v1/dashboard/workload/member` | 특정 담당자 이슈 상세 |
+| `GET` | `/api/v1/dashboard/assets` | Redmine 보호 이미지/첨부파일 프록시 |
 
 ---
 
@@ -335,14 +353,16 @@ npm run dev
 
 ### `GET /api/v1/dashboard/issues/{issue_id}`
 
-선택한 이슈의 상세 정보와 Redmine journal 변경 이력을 반환.
-Redmine `GET /issues/{id}.json?include=journals`를 사용하며, 이슈 단건 기준으로 짧은 TTL 캐시를 적용.
+선택한 이슈의 상세 정보와 Redmine journal 변경 이력, 첨부파일 정보를 반환.
+Redmine `GET /issues/{id}.json?include=journals,attachments`를 사용하며, description / notes는 rich content 렌더링을 위해 HTML 필드를 함께 제공.
+이슈 단건 기준으로 짧은 TTL 캐시를 적용.
 
 ```json
 {
   "id": 8821,
   "subject": "API 명세 업데이트",
   "description": "배포 전 연동 규격 최종 점검 필요",
+  "description_html": "<p>배포 전 연동 규격 최종 점검 필요</p>",
   "status": "In Progress",
   "status_id": 3,
   "status_group": "in_progress",
@@ -359,12 +379,23 @@ Redmine `GET /issues/{id}.json?include=journals`를 사용하며, 이슈 단건 
   "created_on": "2026-04-01T09:00:00Z",
   "updated_on": "2026-04-07T13:20:00Z",
   "url": "http://your-redmine/issues/8821",
+  "redmine_base_url": "http://your-redmine",
+  "attachments": [
+    {
+      "id": 153,
+      "filename": "QR_Order_Process_Flow.svg",
+      "filesize": 18234,
+      "content_type": "image/svg+xml",
+      "content_url": "http://your-redmine/attachments/download/153/QR_Order_Process_Flow.svg"
+    }
+  ],
   "journals": [
     {
       "id": 101,
       "user": "홍길동",
       "created_on": "2026-04-07T13:20:00Z",
       "notes": "배포 일정 확인 완료",
+      "notes_html": "<p>배포 일정 확인 완료</p>",
       "changes": [
         {
           "field": "status_id",
@@ -377,6 +408,21 @@ Redmine `GET /issues/{id}.json?include=journals`를 사용하며, 이슈 단건 
   ]
 }
 ```
+
+---
+
+### `GET /api/v1/dashboard/assets`
+
+Redmine 첨부파일, 업로드 이미지처럼 브라우저 직접 접근 시 인증이 필요한 리소스를 백엔드에서 프록시.
+본문 내 이미지와 첨부 링크는 프론트엔드에서 이 엔드포인트로 자동 변환된다.
+
+**쿼리 파라미터**
+
+| 파라미터 | 타입 | 설명 |
+|---|---|---|
+| `url` | string (필수) | Redmine base URL 기준 절대 리소스 URL |
+
+예: `/api/v1/dashboard/assets?url=http%3A%2F%2Fyour-redmine%2Fattachments%2Fdownload%2F153%2Fdiagram.svg`
 
 ---
 
@@ -562,6 +608,7 @@ Redmine `GET /issues/{id}.json?include=journals`를 사용하며, 이슈 단건 
 | 백엔드 | 글로벌 예외 핸들러 (JSON 500 응답 보장) | v0.3 |
 | 백엔드 | 전체 이슈 목록 API (`GET /api/v1/dashboard/issues`) — 캐시 재사용 | v0.4 |
 | 백엔드 | 단일 이슈 상세 API (`GET /api/v1/dashboard/issues/{issue_id}`) — journals 포함 | v0.5 |
+| 백엔드 | 이슈 상세 HTML 변환 + 첨부파일 포함 + Redmine asset 프록시 | v0.6 |
 | 프론트엔드 | 프로젝트 선택 초기 화면 (`/`) — 카드 그리드 | v0.3 |
 | 프론트엔드 | 프로젝트별 대시보드 (`/dashboard/[projectId]`) — URL 기반 라우팅 | v0.3 |
 | 프론트엔드 | KPI 카드 5개 — Total / Open / In Progress / Overdue / Completion Rate | v0.4 |
@@ -569,7 +616,8 @@ Redmine `GET /issues/{id}.json?include=journals`를 사용하며, 이슈 단건 
 | 프론트엔드 | 활성 필터 칩 표시 + 개별/전체 제거 (`FilterChips`) | v0.4 |
 | 프론트엔드 | 주의 이슈 패널 — Overdue / Due Soon / High Priority 탭 (`AttentionPanel`) | v0.4 |
 | 프론트엔드 | 전체 이슈 테이블 — 7컬럼 정렬·검색·페이지네이션·행 선택 (`IssueTable`) | v0.4 |
-| 프론트엔드 | 우측 이슈 상세 패널 — 기본 정보 / 설명 / 변경 이력 (`IssueDetailDrawer`) | v0.5 |
+| 프론트엔드 | 우측 이슈 상세 패널 — rich description / 첨부파일 / 변경 이력 (`IssueDetailDrawer`) | v0.6 |
+| 프론트엔드 | HTML sanitize + markdown fallback 기반 rich content 렌더러 (`IssueRichContent`) | v0.6 |
 | 프론트엔드 | 담당자별 워크로드 컴팩트 테이블 (클릭 필터 + 상세 모달 분리) | v0.4 |
 | 프론트엔드 | 상태 분포 위젯 — 건수·% + 클릭 필터 (`StatusDistribution`) | v0.4 |
 | 프론트엔드 | 헤더 통합 — 프로젝트명·선택·동기화 시각·수동 새로고침 버튼 | v0.4 |
@@ -586,6 +634,14 @@ Redmine `GET /issues/{id}.json?include=journals`를 사용하며, 이슈 단건 
 | 자동 새로고침 (polling) | 미구현 | Phase 2 계획 |
 | 트렌드 / 번다운 차트 | 미구현 | Phase 3 계획 |
 | 이슈 테이블 URL 필터 동기화 | 미구현 | 필터 상태 URL 쿼리 파라미터 반영 계획 |
+
+### 이번 변경으로 해소된 항목
+
+| 항목 | 결과 |
+|---|---|
+| 이슈 설명이 plain text처럼 보이던 문제 | HTML sanitize + markdown/text fallback으로 개선 |
+| journal notes 줄바꿈/목록/강조 미반영 | rich content 렌더링으로 개선 |
+| Redmine 첨부 이미지/파일이 인증 때문에 깨지던 문제 | `/api/v1/dashboard/assets` 프록시로 개선 |
 
 ---
 
@@ -607,6 +663,13 @@ Redmine `GET /issues/{id}.json?include=journals`를 사용하며, 이슈 단건 
 | 평균 해결 시간 (MTTR) | Journals API 개별 조회 필요 (N+1 문제) |
 | 일별 번다운 차트 | 날짜별 스냅샷 없이 추이 계산 불가 |
 | 개인별 처리 속도 | 이슈 완료 담당자 추적 불가 |
+
+### 현재 리소스 렌더링 한계
+
+| 한계 | 영향 |
+|---|---|
+| Redmine 외부 도메인 리소스는 asset 프록시 대상 아님 | 외부 이미지 URL은 대상 서버 정책에 따라 차단될 수 있음 |
+| Redmine 비교(diff) 전용 UI는 API 응답만으로 완전 재현 불가 | 현재는 긴 텍스트 변경을 요약형으로 표시 |
 
 ---
 
@@ -663,10 +726,30 @@ DB 도입 후:    service  →  repository (DB 조회)
 
 | 버전 | 날짜 | 주요 변경사항 |
 |---|---|---|
+| v0.6 | 2026-04-07 | 이슈 상세 rich content 렌더링, 첨부/이미지 프록시, 변경 이력 가독성 개선 |
 | v0.4 | 2026-04-07 | 운영 대시보드로 전면 리팩토링 — 공유 필터, 이슈 테이블, 주의 이슈 패널 |
 | v0.3 | 2026-04-02 | 라우팅 분리, 코드 품질 개선, UI/UX 전면 개선 |
 | v0.2 | 2026-04-02 | Next.js 프론트엔드 구축, 담당자 상세 모달 추가 |
 | v0.1 | 2026-04-02 | FastAPI 백엔드 MVP (4계층 구조, 4개 엔드포인트) |
+
+### v0.6 — 이슈 상세 rich content + 첨부 리소스 프록시 (2026-04-07)
+
+**백엔드**
+- `textile` 추가 — Redmine description / journal notes를 HTML로 변환하는 `description_html`, `notes_html` 필드 제공
+- `GET /api/v1/dashboard/issues/{issue_id}` 확장 — `attachments`, `redmine_base_url` 포함
+- `GET /api/v1/dashboard/assets` 추가 — API 키 기반 Redmine 보호 이미지/첨부파일 프록시
+- `RedmineClient.fetch_asset()` 추가 — 동일 Redmine origin만 허용하여 안전하게 프록시
+
+**프론트엔드**
+- `IssueRichContent` 신규 추가 — HTML sanitize, markdown fallback, plain text fallback 통합 렌더링
+- `IssueDetailDrawer` 개선 — description 문서형 typography, attachments 섹션, journal notes rich 렌더링, 긴 변경 이력 요약 처리
+- `redmineAssets.ts` 추가 — 상대경로를 절대경로/프록시 URL로 보정
+- 본문 이미지 클릭 시 원본 리소스를 새 탭으로 열도록 개선
+
+**UX 개선 사항**
+- 설명/메모 본문에서 제목, 목록, 강조, 링크, 코드, 표, 이미지 가독성 향상
+- Redmine 인증이 필요한 첨부 이미지와 파일도 패널 내에서 안정적으로 표시
+- description 변경 이력은 긴 원문 덤프 대신 요약형으로 표시하여 타임라인 가독성 개선
 
 ### v0.4 — 운영 대시보드 리팩토링 (2026-04-07)
 

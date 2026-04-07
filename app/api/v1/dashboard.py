@@ -1,10 +1,12 @@
 """
 api/v1/dashboard.py — 대시보드 엔드포인트
-/api/v1/dashboard/* 하위 4개 엔드포인트 구현
+/api/v1/dashboard/* 하위 엔드포인트 구현
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 
-from app.api.v1.deps import get_issue_service, get_project_service, get_workload_service
+from app.api.v1.deps import get_issue_service, get_project_service, get_redmine_client, get_workload_service
+from app.client.redmine_client import RedmineClient
 from app.schemas.dashboard import (
     DashboardSummary,
     IssueDetailResponse,
@@ -86,4 +88,30 @@ async def get_member_issues(
         user_id=user_id,
         unassigned=unassigned,
         project_id=project_id,
+    )
+
+
+@router.get("/assets")
+async def proxy_redmine_asset(
+    url: str = Query(..., description="Redmine asset absolute URL"),
+    client: RedmineClient = Depends(get_redmine_client),
+):
+    """Redmine 보호 리소스를 API 키로 프록시"""
+    try:
+        response = await client.fetch_asset(url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    headers: dict[str, str] = {}
+    content_disposition = response.headers.get("content-disposition")
+    cache_control = response.headers.get("cache-control")
+    if content_disposition:
+        headers["content-disposition"] = content_disposition
+    if cache_control:
+        headers["cache-control"] = cache_control
+
+    return Response(
+        content=response.content,
+        media_type=response.headers.get("content-type", "application/octet-stream"),
+        headers=headers,
     )

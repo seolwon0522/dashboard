@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
 
     # Redmine 클라이언트 생성
     redmine_client = RedmineClient(config=settings.redmine, http_client=http_client)
+    app.state.redmine_client = redmine_client
 
     # 서비스 객체 생성 → app.state에 저장
     app.state.issue_service = IssueService(client=redmine_client, cache=cache, settings=settings)

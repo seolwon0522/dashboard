@@ -147,7 +147,17 @@ class JournalEntry(BaseModel):
     user: str = ""
     created_on: str = ""
     notes: str | None = None
+    notes_html: str | None = None
     changes: list[JournalChange] = []
+
+
+class IssueAttachment(BaseModel):
+    """이슈 첨부파일 항목"""
+    id: int
+    filename: str
+    filesize: int | None = None
+    content_type: str | None = None
+    content_url: str
 
 
 class IssueDetailResponse(BaseModel):
@@ -155,6 +165,7 @@ class IssueDetailResponse(BaseModel):
     id: int
     subject: str
     description: str | None = None
+    description_html: str | None = None
     status: str
     status_id: int | None = None
     status_group: str = "other"
@@ -171,4 +182,6 @@ class IssueDetailResponse(BaseModel):
     created_on: str | None = None
     updated_on: str | None = None
     url: str
+    redmine_base_url: str = ""
+    attachments: list[IssueAttachment] = []
     journals: list[JournalEntry] = []

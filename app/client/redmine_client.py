@@ -3,6 +3,7 @@ client/redmine_client.py — Redmine REST API 비동기 클라이언트
 페이지네이션 자동 처리, 비즈니스 로직 없음 (순수 HTTP 계층)
 """
 import logging
+from urllib.parse import urlparse
 from typing import Any
 
 import httpx
@@ -91,3 +92,22 @@ class RedmineClient:
         """Redmine에 등록된 이슈 상태 목록 조회"""
         data = await self._get("/issue_statuses.json")
         return data.get("issue_statuses", [])
+
+    async def fetch_asset(self, asset_url: str) -> httpx.Response:
+        """Redmine 보호 리소스를 API 키로 프록시 조회"""
+        parsed = urlparse(asset_url)
+        allowed_base = urlparse(self._config.base_url)
+
+        if parsed.scheme not in {"http", "https"}:
+            raise ValueError("지원하지 않는 리소스 URL입니다")
+        if parsed.netloc != allowed_base.netloc:
+            raise ValueError("Redmine 외부 리소스는 프록시할 수 없습니다")
+
+        response = await self._http.get(
+            asset_url,
+            headers=self._headers,
+            timeout=self._config.timeout,
+            follow_redirects=True,
+        )
+        response.raise_for_status()
+        return response
