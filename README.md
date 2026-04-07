@@ -87,7 +87,7 @@ dashboard/
 │   │       └── deps.py                # FastAPI Depends 의존성 주입
 │   │
 │   └── schemas/
-│       └── dashboard.py               # Pydantic 응답 모델 정의
+        └── dashboard.py               # Pydantic 응답 모델 정의 (IssueListItem / IssueListResponse 포함)
 │
 └── frontend/                          # Next.js 프론트엔드
     ├── next.config.mjs                # API 프록시 설정 (rewrites: /api/v1/* → :8000)
@@ -104,10 +104,15 @@ dashboard/
         │           └── page.tsx       # 프로젝트별 대시보드 (/dashboard/:id)
         │
         ├── components/
-        │   ├── DashboardView.tsx      # 대시보드 본체: 데이터 조회 + 3컬럼 렌더링
-        │   ├── SummaryCard.tsx        # KPI 카드 (highlight / subtitle prop 지원)
-        │   ├── OverdueTable.tsx       # 기한 초과 이슈 테이블 (0건 시 숨김)
-        │   ├── WorkloadBar.tsx        # 워크로드 바 (open/overdue 스택 색상 구분)
+        │   ├── DashboardView.tsx      # 대시보드 오케스트레이터: 공유 필터 상태 + 전체 레이아웃
+        │   ├── KpiRow.tsx             # 컴팩트 KPI 카드 5개 (클릭 시 이슈 테이블 필터)
+        │   ├── FilterChips.tsx        # 활성 필터 칩 표시 + 제거
+        │   ├── StatusDistribution.tsx # 상태 분포 위젯 (클릭 시 이슈 테이블 필터)
+        │   ├── AttentionPanel.tsx     # 주의 이슈 패널 (Overdue / Due Soon / High Priority 탭)
+        │   ├── IssueTable.tsx         # 전체 이슈 테이블 (정렬·검색·페이지네이션)
+        │   ├── WorkloadBar.tsx        # 담당자별 워크로드 컴팩트 테이블 (클릭 시 필터)
+        │   ├── SummaryCard.tsx        # KPI 카드 기본 컴포넌트 (레거시, 유지)
+        │   ├── OverdueTable.tsx       # 기한 초과 이슈 테이블 (레거시, 유지)
         │   ├── ProjectSelect.tsx      # 프로젝트 전환 드롭다운
         │   └── MemberModal.tsx        # 담당자 이슈 상세 모달
         │
@@ -127,6 +132,8 @@ dashboard/
 | `services/utils.py` | 여러 서비스가 공유하는 순수 함수 | 상태 보유 |
 | `client/` | Redmine API 호출, 페이지네이션 처리 | 비즈니스 판단 |
 | `core/` | 설정 파싱, 캐시 인프라 제공 | 도메인 의존 |
+
+> `GET /api/v1/dashboard/issues`(전체 이슈 목록) 엔드포인트는 기존 `issues:{project_id}` 캐시를 재사용하므로 Redmine 추가 호출 없음.
 
 ---
 
@@ -187,28 +194,42 @@ JSON 응답  →  Next.js 컴포넌트 렌더링
 ### 프로젝트 대시보드 (`/dashboard/[projectId]`)
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│  ← 뒤로   Redmine Dashboard              [프로젝트 전환 ▾]  │  헤더
-│           전체 이슈 123건    기준 시각: 2026-04-02 10:00       │
-├──────────┬──────────┬──────────┬──────────────────────────────┤
-│  Open    │  진행 중  │  기한초과 │  Closed                      │  KPI 카드
-│    12    │    5     │  ❗ 3    │  45건  처리율 37%            │
-├──────────┴──────────┴──────────┴──────────────────────────────┤
-│  [좌 1/3 — 담당자별 워크로드]  [우 2/3 — 기한 초과 이슈]        │
-│                                                                 │
-│  김OO  ██████🔴░░  8건(2)    │  #123  제목...  +5일  High   │
-│  이OO  █████░░░░░  6건       │  #456  제목...  +3일  Normal │
-│  미할당 ██░░░░░░░░  3건(1)   │  #789  제목...  +1일  High   │
-│                                                                 │
-│  [이슈 상태 분포 비율 바]                                        │
-│  ████████░░░░░░  Open 12(20%)  진행 5(8%)  Closed 45(72%)     │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ← 뒤로  Redmine Dashboard / My Project   [프로젝트 전환 ▾]  Synced 2m ago ↺│  헤더 (sticky)
+├───────────┬───────────┬───────────┬───────────┬─────────────────────────────┤
+│Total Iss. │  Open     │In Progress│  Overdue  │  Completion Rate             │  KPI 카드 5개
+│   62      │   12      │    5      │  ❗ 3     │       73%                   │  (클릭 → 필터)
+├───────────┴───────────┴───────────┴───────────┴─────────────────────────────┤
+│  [좌 1/3 — Assignee Workload + Status Distribution]                          │
+│                                                                               │
+│  Assignee   Open  Overdue  👁         Overdue │ Due Soon │ High Priority     │  우측:
+│  Alice        8      2     ◎         ──────────────────────────────────      │  AttentionPanel
+│  Bob          6      0     ◎         #123 제목...  Alice  +5일 overdue       │  (탭 전환)
+│  Unassigned   3      1     ◎         #456 제목...  Bob    due 2026-04-10     │
+│                                                                               │
+│  [Status Distribution]                                                        │
+│  Open    12  20%  ████                                                        │
+│  In Prog  5   8%  ██                                                          │
+│  Closed  45  72%  ████████████████                                            │
+├───────────────────────────────────────────────────────────────────────────────┤
+│  All Issues  [Status: Open ×] [Assignee: Alice ×]  Clear all                 │  FilterChips
+│  ┌────┬──────────────────┬────────────┬─────────┬──────────┬───────┬───────┐ │
+│  │ ID │ Title            │ Status     │ Assignee│ Priority │  Due  │Upd.   │ │  IssueTable
+│  │ 12 │ API 명세 업데이트 │ ● In Prog  │ Alice   │ High     │ 04-10 │ 04-07 │ │  (정렬·검색·
+│  │  8 │ 배포 연동 개발    │ ● Open     │ Bob     │ Normal   │  —    │ 04-06 │ │   페이지네이션)
+│  └────┴──────────────────┴────────────┴─────────┴──────────┴───────┴───────┘ │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **인터랙션:**
-- 담당자 행 클릭 → 오픈/진행 중 이슈 목록 모달 (ESC·배경 클릭으로 닫기)
-- 기한 초과 이슈 제목 클릭 → Redmine 이슈 페이지 새 탭 열기
-- 헤더 드롭다운 → 프로젝트 전환 (URL 변경, 뒤로가기 지원)
+- **KPI 카드 클릭** → 상태 그룹 또는 overdue 기준으로 이슈 테이블 필터링 (재클릭 시 해제)
+- **Assignee Workload 행 클릭** → 해당 담당자로 이슈 테이블 필터링 (눈 아이콘은 상세 모달)
+- **Status Distribution 행 클릭** → 해당 상태 그룹으로 이슈 테이블 필터링
+- **FilterChips** → 활성 필터 확인 및 개별 제거 / Clear all
+- **IssueTable 행 클릭** → Redmine 이슈 페이지 새 탭 열기
+- **IssueTable 컬럼 헤더 클릭** → 오름차순/내림차순 정렬 토글
+- **헤더 ↺ 버튼** → 전체 데이터 수동 새로고침 (모든 캐시 재조회)
+- **헤더 드롭다운** → 프로젝트 전환 (URL 변경, 필터 초기화)
 
 ---
 
@@ -270,9 +291,41 @@ npm run dev
 |---|---|---|
 | `GET` | `/api/v1/dashboard/summary` | 이슈 전체 요약 통계 |
 | `GET` | `/api/v1/dashboard/projects` | 전체 프로젝트 목록 + open 이슈 수 |
+| `GET` | `/api/v1/dashboard/issues` | **전체 이슈 목록** (상태 그룹·담당자·기한 초과 여부 포함) |
 | `GET` | `/api/v1/dashboard/issues/overdue` | 기한 초과 이슈 목록 |
 | `GET` | `/api/v1/dashboard/workload` | 담당자별 워크로드 |
 | `GET` | `/api/v1/dashboard/workload/member` | 특정 담당자 이슈 상세 |
+
+---
+
+### `GET /api/v1/dashboard/issues`
+
+전체 이슈 목록 반환. 상태 그룹(`status_group`), 담당자 ID, 마감일, 갱신일, 기한 초과 여부 포함.  
+기존 캐시(`issues:{project_id}`)를 재사용하므로 Redmine 추가 API 호출 없음.
+
+```json
+{
+  "project_id": "my-project",
+  "total": 17,
+  "issues": [
+    {
+      "id": 8821,
+      "subject": "API 명세 업데이트",
+      "status": "In Progress",
+      "status_group": "in_progress",
+      "priority": "High",
+      "assigned_to": "홍길동",
+      "assigned_to_id": 12,
+      "due_date": "2026-04-10",
+      "updated_on": "2026-04-07",
+      "is_overdue": false,
+      "days_overdue": 0,
+      "url": "http://your-redmine/issues/8821"
+    }
+  ],
+  "cached_at": "2026-04-07T10:00:00.000000"
+}
+```
 
 ---
 
@@ -452,18 +505,23 @@ npm run dev
 | 백엔드 | `config.json` 기반 설정 로드 (`lru_cache` 싱글턴) | v0.1 |
 | 백엔드 | TTL 인메모리 캐시 (`asyncio.Lock` 동시성 보호) | v0.1 |
 | 백엔드 | Redmine 비동기 클라이언트 (httpx, 자동 페이지네이션) | v0.1 |
-| 백엔드 | 5개 대시보드 API 엔드포인트 | v0.1–v0.2 |
+| 백엔드 | 6개 대시보드 API 엔드포인트 | v0.1–v0.4 |
 | 백엔드 | `services/utils.py` 공통 함수 분리 (`calc_overdue`) | v0.3 |
 | 백엔드 | `WorkloadService` 캐시 중복 제거 (IssueService 캐시 재사용) | v0.3 |
 | 백엔드 | 글로벌 예외 핸들러 (JSON 500 응답 보장) | v0.3 |
+| 백엔드 | 전체 이슈 목록 API (`GET /api/v1/dashboard/issues`) — 캐시 재사용 | v0.4 |
 | 프론트엔드 | 프로젝트 선택 초기 화면 (`/`) — 카드 그리드 | v0.3 |
 | 프론트엔드 | 프로젝트별 대시보드 (`/dashboard/[projectId]`) — URL 기반 라우팅 | v0.3 |
-| 프론트엔드 | KPI 요약 카드 4개 (Open / 진행 중 / 기한초과 / Closed) | v0.2–v0.3 |
-| 프론트엔드 | 담당자별 워크로드 바 (CSS 기반 스택 바, 차트 라이브러리 미사용) | v0.2 |
-| 프론트엔드 | 기한 초과 이슈 테이블 (Redmine 직접 링크 포함) | v0.2–v0.3 |
+| 프론트엔드 | KPI 카드 5개 — Total / Open / In Progress / Overdue / Completion Rate | v0.4 |
+| 프론트엔드 | KPI · 담당자 · 상태 클릭 → 이슈 테이블 공유 필터링 (`useReducer`) | v0.4 |
+| 프론트엔드 | 활성 필터 칩 표시 + 개별/전체 제거 (`FilterChips`) | v0.4 |
+| 프론트엔드 | 주의 이슈 패널 — Overdue / Due Soon / High Priority 탭 (`AttentionPanel`) | v0.4 |
+| 프론트엔드 | 전체 이슈 테이블 — 7컬럼 정렬·검색·페이지네이션·행 클릭 (`IssueTable`) | v0.4 |
+| 프론트엔드 | 담당자별 워크로드 컴팩트 테이블 (클릭 필터 + 상세 모달 분리) | v0.4 |
+| 프론트엔드 | 상태 분포 위젯 — 건수·% + 클릭 필터 (`StatusDistribution`) | v0.4 |
+| 프론트엔드 | 헤더 통합 — 프로젝트명·선택·동기화 시각·수동 새로고침 버튼 | v0.4 |
 | 프론트엔드 | 담당자 클릭 → 이슈 상세 모달 (ESC / 배경 클릭 닫기) | v0.2 |
-| 프론트엔드 | 이슈 상태 분포 비율 바 (순수 Tailwind CSS) | v0.3 |
-| 프론트엔드 | 프로젝트 전환 드롭다운 (헤더 고정) | v0.3 |
+| 프론트엔드 | 스켈레톤 로딩 (KPI·워크로드·상태) + 에러 Retry 버튼 | v0.4 |
 
 ### 미구현 / 부분 구현
 
@@ -474,6 +532,7 @@ npm run dev
 | 스테일 이슈 목록 API | 미구현 (config에 `stale_rule` 설정만 존재) | Phase 2 계획 |
 | 자동 새로고침 (polling) | 미구현 | Phase 2 계획 |
 | 트렌드 / 번다운 차트 | 미구현 | Phase 3 계획 |
+| 이슈 테이블 URL 필터 동기화 | 미구현 | 필터 상태 URL 쿼리 파라미터 반영 계획 |
 
 ---
 
@@ -551,9 +610,40 @@ DB 도입 후:    service  →  repository (DB 조회)
 
 | 버전 | 날짜 | 주요 변경사항 |
 |---|---|---|
+| v0.4 | 2026-04-07 | 운영 대시보드로 전면 리팩토링 — 공유 필터, 이슈 테이블, 주의 이슈 패널 |
 | v0.3 | 2026-04-02 | 라우팅 분리, 코드 품질 개선, UI/UX 전면 개선 |
 | v0.2 | 2026-04-02 | Next.js 프론트엔드 구축, 담당자 상세 모달 추가 |
 | v0.1 | 2026-04-02 | FastAPI 백엔드 MVP (4계층 구조, 4개 엔드포인트) |
+
+### v0.4 — 운영 대시보드 리팩토링 (2026-04-07)
+
+**백엔드**
+- `GET /api/v1/dashboard/issues` 엔드포인트 추가 — 전체 이슈 목록 (상태 그룹, 담당자 ID, 마감일, 갱신일, 기한 초과 여부 포함)
+- `IssueService.get_all_issues()` 구현 — 기존 `issues:{project_id}` 캐시 재사용, Redmine 추가 호출 없음
+- `schemas/dashboard.py` — `IssueListItem`, `IssueListResponse` Pydantic 모델 추가
+
+**프론트엔드 — 신규 컴포넌트**
+- `KpiRow` — Total / Open / In Progress / Overdue / Completion Rate 5개 카드. 클릭 시 이슈 테이블 필터 적용, 재클릭 시 해제
+- `FilterChips` — 활성 필터 칩 표시, 개별 × 버튼 및 Clear all 지원
+- `StatusDistribution` — 상태별 건수·% + 미니 프로그레스 바. 클릭 시 이슈 테이블 필터 적용
+- `AttentionPanel` — Overdue / Due Soon(7일 이내) / High Priority 이슈를 탭으로 전환. 0건 시 성공 메시지 표시
+- `IssueTable` — 전체 이슈 테이블 (ID·제목·상태·담당자·우선순위·마감일·갱신일 7컬럼, 클라이언트 정렬, 텍스트 검색, 25행 페이지네이션, 행 클릭 → Redmine 새 탭)
+
+**프론트엔드 — 리팩토링**
+- `DashboardView` 전면 재작성 — `useReducer` 기반 공유 필터 상태 관리, 헤더(sticky) + KPI + 2컬럼 분석 + 이슈 테이블 레이아웃 통합
+- `WorkloadBar` — 바 차트 → 컴팩트 테이블 형태로 교체. 행 클릭 시 이슈 테이블 필터링, 눈 아이콘 버튼으로 상세 모달 분리
+- `[projectId]/page.tsx` — 순수 라우팅 셸로 단순화 (레이아웃·데이터 로직은 `DashboardView`에 위임)
+- `types/dashboard.ts` — `IssueListItem`, `IssueListResponse`, `AssigneeFilter`, `DashboardFilter` 타입 추가
+- `lib/api.ts` — `fetchAllIssues()` 함수 추가
+
+**UX 개선 사항**
+- 헤더에 동기화 시각(Synced N ago) 및 수동 새로고침 버튼 통합
+- 프로젝트 전환 시 모든 필터 자동 초기화
+- KPI·워크로드·상태 분포 스켈레톤 로딩 상태 추가
+- 에러 상태에 Retry 버튼 추가
+- 0건 Overdue: 기존 빈 카드 → AttentionPanel 내 성공 메시지로 대체
+
+---
 
 ### v0.3 — 라우팅 분리 + 코드 품질 + UI/UX 전면 개선 (2026-04-02)
 

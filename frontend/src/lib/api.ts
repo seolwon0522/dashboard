@@ -2,6 +2,7 @@
 // Next.js rewrites()를 통해 /api/v1/* → FastAPI로 프록시됨 (CORS 불필요)
 import type {
   DashboardSummary,
+  IssueListResponse,
   MemberIssuesResponse,
   OverdueIssuesResponse,
   ProjectListResponse,
@@ -46,6 +47,11 @@ export async function fetchOverdueIssues(projectId?: string): Promise<OverdueIss
 // 담당자별 워크로드 조회
 export async function fetchWorkload(projectId?: string): Promise<WorkloadResponse> {
   return apiFetch(withProject('/api/v1/dashboard/workload', projectId))
+}
+
+// 전체 이슈 목록 조회 (상태 그룹, 담당자, 마감일, 기한 초과 여부 포함)
+export async function fetchAllIssues(projectId?: string): Promise<IssueListResponse> {
+  return apiFetch(withProject('/api/v1/dashboard/issues', projectId))
 }
 
 // 담당자별 오픈/진행중 이슈 상세 조회

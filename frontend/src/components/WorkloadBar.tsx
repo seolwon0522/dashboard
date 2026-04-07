@@ -1,73 +1,115 @@
-// 담당자별 워크로드 바 차트 컴포넌트
-// 외부 차트 라이브러리 미사용 — Tailwind + 인라인 스타일로 구현
-// 카드 래퍼는 부모(DashboardView)에서 제공
-import type { WorkloadItem } from '@/types/dashboard'
+// 담당자별 워크로드 컴팩트 테이블
+// 행 클릭 → 이슈 테이블 담당자 필터링
+// 상세 버튼 클릭 → MemberModal 열기
+import type { AssigneeFilter, WorkloadItem } from '@/types/dashboard'
 
 interface Props {
   workload: WorkloadItem[]
-  // 담당자 클릭 시 호출되는 콜백 (모달 열기용)
-  onSelect?: (userId: number | null, userName: string) => void
+  activeAssignee: AssigneeFilter | null
+  onFilter: (assignee: AssigneeFilter | null) => void
+  onOpenModal: (item: WorkloadItem) => void
 }
 
-export default function WorkloadBar({ workload, onSelect }: Props) {
-  // 데이터 없을 때
+export default function WorkloadBar({ workload, activeAssignee, onFilter, onOpenModal }: Props) {
   if (workload.length === 0) {
     return (
       <div className="px-4 py-6 text-center text-gray-400 text-sm">
-        워크로드 데이터가 없습니다.
+        No workload data.
       </div>
     )
   }
 
-  // 바 너비 계산용 최대 open 이슈 수
-  const maxOpen = Math.max(...workload.map((w) => w.open_issues), 1)
-
   return (
-    <div className="divide-y divide-gray-100">
-      {workload.map((item) => (
-        <div
-          key={item.user_id ?? 'unassigned'}
-          role="button"
-          tabIndex={0}
-          onClick={() => onSelect?.(item.user_id, item.name)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              onSelect?.(item.user_id, item.name)
-            }
-          }}
-          className="flex items-center gap-2 py-2 px-3 cursor-pointer transition-colors hover:bg-blue-50 active:bg-blue-100"
-        >
-          {/* 담당자 이름 */}
-          <span className="w-16 shrink-0 text-xs font-medium text-gray-700 truncate">
-            {item.name}
-          </span>
-
-          {/* 바 트랙 — overdue가 있으면 빨간색 구간 포함 */}
-          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden flex">
-            {item.overdue_issues > 0 && (
-              <div
-                className="h-full bg-red-400 transition-all duration-300"
-                style={{ width: `${(item.overdue_issues / maxOpen) * 100}%` }}
-              />
-            )}
-            <div
-              className="h-full bg-blue-400 transition-all duration-300"
-              style={{ width: `${((item.open_issues - item.overdue_issues) / maxOpen) * 100}%` }}
-            />
-          </div>
-
-          {/* 숫자 */}
-          <span className="shrink-0 text-xs tabular-nums text-gray-500">
-            {item.open_issues}
-          </span>
-          {item.overdue_issues > 0 && (
-            <span className="shrink-0 text-xs tabular-nums text-red-500 font-medium -ml-1">
-              ({item.overdue_issues})
-            </span>
-          )}
-        </div>
-      ))}
+    <div className="overflow-hidden">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-gray-100">
+            <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+              Assignee
+            </th>
+            <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wide w-14">
+              Open
+            </th>
+            <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wide w-16">
+              Overdue
+            </th>
+            <th className="w-8" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {workload.map((item) => {
+            const af: AssigneeFilter = { id: item.user_id, name: item.name }
+            const isActive =
+              activeAssignee !== null &&
+              activeAssignee.id === item.user_id
+            return (
+              <tr
+                key={item.user_id ?? 'unassigned'}
+                role="button"
+                tabIndex={0}
+                onClick={() => onFilter(isActive ? null : af)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onFilter(isActive ? null : af)
+                  }
+                }}
+                className={[
+                  'cursor-pointer transition-colors hover:bg-blue-50',
+                  isActive ? 'bg-blue-50' : '',
+                ].join(' ')}
+              >
+                <td className="px-3 py-2 max-w-[150px]">
+                  <span
+                    className={`block truncate text-xs font-medium ${
+                      isActive ? 'text-blue-700' : 'text-gray-700'
+                    }`}
+                    title={item.name}
+                  >
+                    {item.name}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-right text-xs tabular-nums font-medium text-gray-700">
+                  {item.open_issues}
+                </td>
+                <td className="px-3 py-2 text-right text-xs tabular-nums">
+                  {item.overdue_issues > 0 ? (
+                    <span className="font-semibold text-red-600">{item.overdue_issues}</span>
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
+                </td>
+                <td className="px-2 py-2">
+                  <button
+                    type="button"
+                    aria-label={`View ${item.name}'s issues`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenModal(item)
+                    }}
+                    className="text-gray-300 hover:text-blue-500 transition-colors focus:outline-none"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                      />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

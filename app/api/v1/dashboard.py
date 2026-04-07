@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.v1.deps import get_issue_service, get_project_service, get_workload_service
 from app.schemas.dashboard import (
     DashboardSummary,
+    IssueListResponse,
     MemberIssuesResponse,
     OverdueIssuesResponse,
     ProjectListResponse,
@@ -43,6 +44,15 @@ async def get_overdue_issues(
 ):
     """기한 초과 이슈 목록 (초과일 기준 내림차순)"""
     return await service.get_overdue_issues(project_id)
+
+
+@router.get("/issues", response_model=IssueListResponse)
+async def get_all_issues(
+    project_id: str | None = Query(None, description="프로젝트 ID (미지정 시 config 기본값)"),
+    service: IssueService = Depends(get_issue_service),
+):
+    """전체 이슈 목록 (상태 그룹, 담당자, 마감일, 기한 초과 여부 포함)"""
+    return await service.get_all_issues(project_id)
 
 
 @router.get("/workload", response_model=WorkloadResponse)

@@ -1,235 +1,343 @@
 'use client'
 
-// 대시보드 본체 컴포넌트
-// 기존 page.tsx에서 대시보드 렌더링 로직만 분리
-// projectId를 props로 받아 summary / overdue / workload 데이터를 조회·표시
-import { useEffect, useState } from 'react'
+// 대시보드 메인 오케스트레이터
+// 헤더, KPI, 워크로드, 상태 분포, 주의 이슈, 이슈 테이블 통합 관리
+// 공유 필터 상태로 모든 위젯이 연동됨
+import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 
-import OverdueTable from '@/components/OverdueTable'
-import SummaryCard from '@/components/SummaryCard'
-import WorkloadBar from '@/components/WorkloadBar'
+import AttentionPanel from '@/components/AttentionPanel'
+import FilterChips from '@/components/FilterChips'
+import IssueTable from '@/components/IssueTable'
+import KpiRow from '@/components/KpiRow'
 import MemberModal from '@/components/MemberModal'
+import ProjectSelect from '@/components/ProjectSelect'
+import StatusDistribution from '@/components/StatusDistribution'
+import WorkloadBar from '@/components/WorkloadBar'
 import {
-  fetchOverdueIssues,
+  fetchAllIssues,
   fetchSummary,
   fetchWorkload,
 } from '@/lib/api'
 import type {
+  AssigneeFilter,
+  DashboardFilter,
   DashboardSummary,
-  OverdueIssuesResponse,
+  IssueListItem,
+  IssueListResponse,
+  ProjectItem,
   WorkloadItem,
   WorkloadResponse,
 } from '@/types/dashboard'
 
 interface Props {
   projectId: string
+  projects: ProjectItem[]
+  projectName: string
+  onProjectChange: (id: string) => void
 }
 
-export default function DashboardView({ projectId }: Props) {
-  // 대시보드 데이터
+// ── Filter state management ──────────────────────────────────────────────────
+
+const EMPTY_FILTER: DashboardFilter = {
+  statusGroup: null,
+  assignee: null,
+  onlyOverdue: false,
+}
+
+type FilterAction =
+  | { type: 'SET'; patch: Partial<DashboardFilter> }
+  | { type: 'CLEAR_KEY'; key: keyof DashboardFilter }
+  | { type: 'CLEAR_ALL' }
+
+function filterReducer(state: DashboardFilter, action: FilterAction): DashboardFilter {
+  switch (action.type) {
+    case 'SET':
+      return { ...state, ...action.patch }
+    case 'CLEAR_KEY':
+      return { ...state, [action.key]: EMPTY_FILTER[action.key] }
+    case 'CLEAR_ALL':
+      return EMPTY_FILTER
+  }
+}
+
+// ── Spinner ──────────────────────────────────────────────────────────────────
+
+function Spinner({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+    </svg>
+  )
+}
+
+// ── Skeleton card ─────────────────────────────────────────────────────────────
+
+function SkeletonCard({ className = '' }: { className?: string }) {
+  return <div className={`rounded-lg bg-gray-100 animate-pulse ${className}`} />
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+export default function DashboardView({ projectId, projects, projectName, onProjectChange }: Props) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
-  const [overdue, setOverdue] = useState<OverdueIssuesResponse | null>(null)
   const [workload, setWorkload] = useState<WorkloadResponse | null>(null)
-  // 로딩 / 에러 상태
+  const [issueList, setIssueList] = useState<IssueListResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // 담당자별 모달 상태
+  const [lastSynced, setLastSynced] = useState<Date | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
   const [selectedMember, setSelectedMember] = useState<WorkloadItem | null>(null)
 
-  // projectId가 바뀔 때마다 대시보드 데이터 전체 재조회
+  const [filter, dispatch] = useReducer(filterReducer, EMPTY_FILTER)
+
+  // ── Data fetch ──────────────────────────────────────────────────────────────
   useEffect(() => {
     setLoading(true)
     setError(null)
 
-    // 3개 API를 병렬로 호출
-    Promise.all([
-      fetchSummary(projectId),
-      fetchOverdueIssues(projectId),
-      fetchWorkload(projectId),
-    ])
-      .then(([summaryData, overdueData, workloadData]) => {
-        setSummary(summaryData)
-        setOverdue(overdueData)
-        setWorkload(workloadData)
+    Promise.all([fetchSummary(projectId), fetchWorkload(projectId), fetchAllIssues(projectId)])
+      .then(([s, w, il]) => {
+        setSummary(s)
+        setWorkload(w)
+        setIssueList(il)
+        setLastSynced(new Date())
       })
-      .catch((err: Error) => {
-        setError(err.message)
-      })
-      .finally(() => {
-        setLoading(false)
-      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [projectId, refreshKey])
+
+  // Reset filter when project changes
+  useEffect(() => {
+    dispatch({ type: 'CLEAR_ALL' })
   }, [projectId])
 
-  // ── 로딩 상태 ──
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-gray-400">
-        <svg className="animate-spin w-6 h-6 mr-2" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-        </svg>
-        데이터 불러오는 중...
-      </div>
-    )
-  }
+  // ── Handlers ────────────────────────────────────────────────────────────────
+  const handleRefresh = useCallback(() => setRefreshKey((k) => k + 1), [])
 
-  // ── 에러 상태 ──
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 mb-6 text-sm">
-        <strong>오류 발생:</strong> {error}
-        <p className="mt-1 text-red-500">백엔드 서버(포트 8000)가 실행 중인지 확인하세요.</p>
-      </div>
-    )
-  }
+  const handleFilterChange = useCallback((patch: Partial<DashboardFilter>) => {
+    dispatch({ type: 'SET', patch })
+  }, [])
 
-  if (!summary) return null
+  const handleClearKey = useCallback((key: keyof DashboardFilter) => {
+    dispatch({ type: 'CLEAR_KEY', key })
+  }, [])
 
-  const overdueCount = overdue?.count ?? 0
-  const closedCount = summary.by_status_group['closed'] ?? 0
-  // 처리율: Closed / 전체 비율
-  const completionRate = summary.total > 0
-    ? Math.round((closedCount / summary.total) * 100)
-    : 0
+  const handleClearAll = useCallback(() => dispatch({ type: 'CLEAR_ALL' }), [])
 
-  // 담당자 클릭 핸들러 (모달 열기)
-  const handleMemberSelect = (userId: number | null) => {
-    const member = workload?.workload.find((w) => w.user_id === userId)
-    if (member) setSelectedMember(member)
-  }
+  const handleAssigneeFilter = useCallback((af: AssigneeFilter | null) => {
+    dispatch({ type: 'SET', patch: { assignee: af } })
+  }, [])
 
-  // 이슈 상태 분포 — 비율 바 + 범례 표시용 데이터
-  const statusGroups = [
-    { key: 'open',        label: 'Open',   count: summary.by_status_group['open'] ?? 0,        color: 'bg-yellow-400' },
-    { key: 'in_progress', label: '진행 중', count: summary.by_status_group['in_progress'] ?? 0, color: 'bg-blue-400'   },
-    { key: 'closed',      label: 'Closed', count: closedCount,                                  color: 'bg-green-400'  },
-  ]
-  const totalForBar = statusGroups.reduce((sum, g) => sum + g.count, 0) || 1
+  const handleOpenModal = useCallback((item: WorkloadItem) => {
+    setSelectedMember(item)
+  }, [])
 
-  return (
-    <>
-      {/* ── 보조 정보: 전체 이슈 수 + 기준 시각 ── */}
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-sm text-gray-500">
-          전체 이슈{' '}
-          <span className="font-semibold text-gray-700">
-            {summary.total.toLocaleString()}
+  // ── Derived state ───────────────────────────────────────────────────────────
+  const filteredIssues = useMemo<IssueListItem[]>(() => {
+    if (!issueList) return []
+    let result = issueList.issues
+
+    if (filter.statusGroup) {
+      result = result.filter((i) => i.status_group === filter.statusGroup)
+    }
+    if (filter.assignee !== null) {
+      const { id } = filter.assignee
+      result =
+        id === null
+          ? result.filter((i) => i.assigned_to_id === null)
+          : result.filter((i) => i.assigned_to_id === id)
+    }
+    if (filter.onlyOverdue) {
+      result = result.filter((i) => i.is_overdue)
+    }
+    return result
+  }, [issueList, filter])
+
+  const syncedLabel = useMemo(() => {
+    if (!lastSynced) return null
+    const diff = Math.round((Date.now() - lastSynced.getTime()) / 1000)
+    if (diff < 60) return 'just now'
+    if (diff < 3600) return `${Math.round(diff / 60)}m ago`
+    return lastSynced.toLocaleTimeString()
+  }, [lastSynced])
+
+  // ── Header ─────────────────────────────────────────────────────────────────
+  const header = (
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3 flex-wrap">
+        <Link
+          href="/"
+          className="text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+          title="Back to project list"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </Link>
+
+        <div className="flex items-baseline gap-2 mr-auto min-w-0">
+          <h1 className="text-sm font-bold text-gray-800 whitespace-nowrap shrink-0">
+            Redmine Dashboard
+          </h1>
+          <span className="text-gray-300 hidden sm:inline shrink-0">/</span>
+          <span
+            className="text-sm font-medium text-gray-500 hidden sm:block truncate"
+            title={projectName}
+          >
+            {projectName}
           </span>
-          건
-        </p>
-        <p className="text-xs text-gray-400">
-          기준 시각: {new Date(summary.cached_at).toLocaleString('ko-KR')}
-        </p>
-      </div>
-
-      {/* ── KPI 카드: Open · 진행 중 · 기한 초과 · Closed ── */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-5">
-        <SummaryCard
-          label="Open"
-          value={summary.by_status_group['open'] ?? 0}
-          color="yellow"
-        />
-        <SummaryCard
-          label="진행 중"
-          value={summary.by_status_group['in_progress'] ?? 0}
-          color="blue"
-        />
-        <SummaryCard
-          label="기한 초과"
-          value={summary.overdue}
-          color="red"
-          highlight={summary.overdue > 0}
-        />
-        <SummaryCard
-          label="Closed"
-          value={closedCount}
-          color="green"
-          subtitle={`처리율 ${completionRate}%`}
-        />
-      </section>
-
-      {/* ── 메인 콘텐츠: 좌측 사이드(1/3) + 우측 메인(2/3) ── */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        {/* ── 좌측 패널: 워크로드 + 상태 분포 ── */}
-        <div className="space-y-5">
-          {/* 담당자별 워크로드 */}
-          <section className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <h2 className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
-              담당자별 워크로드
-            </h2>
-            <WorkloadBar
-              workload={workload?.workload ?? []}
-              onSelect={handleMemberSelect}
-            />
-          </section>
-
-          {/* 이슈 상태 분포 — by_status_group 데이터로 비율 시각화 */}
-          <section className="bg-white rounded-lg shadow-sm p-4">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-              이슈 상태 분포
-            </h2>
-            {/* 비율 스택 바 (순수 Tailwind) */}
-            <div className="h-3 flex rounded-full overflow-hidden bg-gray-100">
-              {statusGroups.map(
-                (g) =>
-                  g.count > 0 && (
-                    <div
-                      key={g.key}
-                      className={`${g.color} transition-all duration-300`}
-                      style={{ width: `${(g.count / totalForBar) * 100}%` }}
-                      title={`${g.label}: ${g.count}건 (${Math.round((g.count / totalForBar) * 100)}%)`}
-                    />
-                  ),
-              )}
-            </div>
-            {/* 범례 */}
-            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5">
-              {statusGroups.map((g) => (
-                <div key={g.key} className="flex items-center gap-1.5 text-xs text-gray-600">
-                  <span className={`w-2 h-2 rounded-full ${g.color}`} />
-                  <span>
-                    {g.label}{' '}
-                    <span className="font-medium text-gray-800">{g.count}</span>
-                    <span className="text-gray-400 ml-0.5">
-                      ({Math.round((g.count / totalForBar) * 100)}%)
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
         </div>
 
-        {/* ── 우측 패널: 기한 초과 이슈 ── */}
-        <section className="lg:col-span-2 bg-white rounded-lg shadow-sm overflow-hidden">
-          {/* 섹션 헤더 */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
-            <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              기한 초과 이슈
+        <ProjectSelect
+          projects={projects}
+          selectedId={projectId}
+          onChange={(id) => id && onProjectChange(id)}
+        />
+
+        {syncedLabel && (
+          <span className="text-xs text-gray-400 hidden md:inline whitespace-nowrap shrink-0">
+            Synced {syncedLabel}
+          </span>
+        )}
+
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={loading}
+          title="Refresh data"
+          className="p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors disabled:opacity-40 shrink-0"
+        >
+          <svg
+            className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+        </button>
+      </div>
+    </header>
+  )
+
+  // ── Error state ─────────────────────────────────────────────────────────────
+  if (!loading && error) {
+    return (
+      <div className="min-h-screen">
+        {header}
+        <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-8">
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 text-sm max-w-xl">
+            <p className="font-semibold">Failed to load dashboard data</p>
+            <p className="mt-1 text-red-600 text-xs">{error}</p>
+            <p className="mt-1 text-red-500 text-xs">
+              Ensure the backend server (port 8000) is running.
+            </p>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="mt-3 text-xs font-medium text-red-700 underline hover:no-underline"
+            >
+              Retry
+            </button>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  // ── Main layout ─────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen flex flex-col">
+      {header}
+      <main className="flex-1 max-w-screen-2xl mx-auto w-full px-4 sm:px-6 py-5 space-y-5">
+
+        {/* KPI row */}
+        {summary ? (
+          <KpiRow summary={summary} filter={filter} onFilterChange={handleFilterChange} />
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonCard key={i} className="h-[72px]" />
+            ))}
+          </div>
+        )}
+
+        {/* Two-column analytics + attention */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+          {/* Left: Workload + Status Distribution */}
+          <div className="space-y-4">
+            <section className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <h2 className="px-3 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                Assignee Workload
+              </h2>
+              {loading ? (
+                <div className="p-3 space-y-2">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <SkeletonCard key={i} className="h-8" />
+                  ))}
+                </div>
+              ) : (
+                <WorkloadBar
+                  workload={workload?.workload ?? []}
+                  activeAssignee={filter.assignee}
+                  onFilter={handleAssigneeFilter}
+                  onOpenModal={handleOpenModal}
+                />
+              )}
+            </section>
+
+            <section className="bg-white rounded-lg border border-gray-200 p-3">
+              <h2 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                Status Distribution
+              </h2>
+              {summary ? (
+                <StatusDistribution
+                  summary={summary}
+                  filter={filter}
+                  onFilterChange={handleFilterChange}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <SkeletonCard key={i} className="h-10" />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* Right: Attention panel */}
+          <div className="lg:col-span-2">
+            <AttentionPanel issues={issueList?.issues ?? []} loading={loading} />
+          </div>
+        </div>
+
+        {/* Issue table */}
+        <section className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+              All Issues
             </h2>
-            {overdueCount > 0 ? (
-              <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
-                {overdueCount}건
-              </span>
-            ) : (
-              <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                0건
+            {issueList && (
+              <span className="text-xs text-gray-400">
+                {issueList.total.toLocaleString()} total
               </span>
             )}
           </div>
-          {/* 테이블 또는 빈 상태 */}
-          {overdueCount > 0 ? (
-            <OverdueTable issues={overdue?.issues ?? []} />
-          ) : (
-            <div className="flex items-center justify-center gap-2 py-10 text-sm text-green-600">
-              <span>✅</span>
-              <span>기한 초과 이슈가 없습니다</span>
-            </div>
-          )}
+          <FilterChips filter={filter} onClear={handleClearKey} onClearAll={handleClearAll} />
+          <IssueTable issues={filteredIssues} loading={loading} />
         </section>
-      </div>
+      </main>
 
-      {/* 담당자별 작업현황 모달 */}
+      {/* Member detail modal */}
       {selectedMember && (
         <MemberModal
           member={selectedMember}
@@ -237,6 +345,6 @@ export default function DashboardView({ projectId }: Props) {
           onClose={() => setSelectedMember(null)}
         />
       )}
-    </>
+    </div>
   )
 }

@@ -76,3 +76,38 @@ export interface MemberIssuesResponse {
   issues: MemberIssueItem[]
   cached_at: string
 }
+
+// GET /api/v1/dashboard/issues 응답
+export interface IssueListItem {
+  id: number
+  subject: string
+  status: string
+  status_group: string
+  priority: string | null
+  assigned_to: string | null
+  assigned_to_id: number | null
+  due_date: string | null
+  updated_on: string | null
+  is_overdue: boolean
+  days_overdue: number
+  url: string
+}
+
+export interface IssueListResponse {
+  project_id: string
+  total: number
+  issues: IssueListItem[]
+  cached_at: string
+}
+
+// 대시보드 공유 필터 상태
+export interface AssigneeFilter {
+  id: number | null // null = 미할당
+  name: string
+}
+
+export interface DashboardFilter {
+  statusGroup: string | null
+  assignee: AssigneeFilter | null
+  onlyOverdue: boolean
+}

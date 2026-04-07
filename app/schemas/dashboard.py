@@ -84,6 +84,30 @@ class CacheInvalidateResponse(BaseModel):
 
 # ── 담당자별 이슈 상세 ──
 
+class IssueListItem(BaseModel):
+    """전체 이슈 목록 항목"""
+    id: int
+    subject: str
+    status: str
+    status_group: str
+    priority: str | None = None
+    assigned_to: str | None = None
+    assigned_to_id: int | None = None
+    due_date: str | None = None
+    updated_on: str | None = None
+    is_overdue: bool = False
+    days_overdue: int = 0
+    url: str
+
+
+class IssueListResponse(BaseModel):
+    """GET /api/v1/dashboard/issues 응답"""
+    project_id: str
+    total: int
+    issues: list[IssueListItem]
+    cached_at: datetime
+
+
 class MemberIssueItem(BaseModel):
     """담당자별 이슈 항목 (오픈/진행중 전체)"""
     id: int

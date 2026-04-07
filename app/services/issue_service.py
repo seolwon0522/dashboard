@@ -127,3 +127,55 @@ class IssueService:
             "issues": overdue_list,
             "cached_at": datetime.now(),
         }
+
+    async def get_all_issues(self, project_id: str | None = None) -> dict:
+        """
+        전체 이슈 목록 반환 (상태 그룹, 담당자, 기한 초과 여부 포함)
+        기존 issues:{project_id} 캐시를 재사용하여 추가 API 호출 없음
+        """
+        pid = self._resolve_project(project_id)
+        issues = await self._fetch_project_issues(pid)
+
+        today = date.today()
+        base_url = self._settings.redmine.base_url
+        overdue_exclude = self._settings.get_excluded_status_ids(
+            self._settings.dashboard.overdue_rule.exclude_status_groups
+        )
+
+        result = []
+        for issue in issues:
+            status_id = issue.get("status", {}).get("id")
+            group = self._settings.get_status_group(status_id) or "other"
+            assigned = issue.get("assigned_to")
+            due_str = issue.get("due_date")
+            updated_raw = issue.get("updated_on") or ""
+
+            is_overdue = False
+            days_overdue = 0
+            if due_str and status_id not in overdue_exclude:
+                is_overdue, days_overdue = calc_overdue(due_str, today)
+
+            result.append({
+                "id": issue["id"],
+                "subject": issue.get("subject", ""),
+                "status": issue.get("status", {}).get("name", ""),
+                "status_group": group,
+                "priority": issue.get("priority", {}).get("name"),
+                "assigned_to": assigned.get("name") if assigned else None,
+                "assigned_to_id": assigned.get("id") if assigned else None,
+                "due_date": due_str,
+                "updated_on": updated_raw[:10] if updated_raw else None,
+                "is_overdue": is_overdue,
+                "days_overdue": days_overdue,
+                "url": f"{base_url}/issues/{issue['id']}",
+            })
+
+        # 최근 업데이트 순 정렬
+        result.sort(key=lambda x: x.get("updated_on") or "", reverse=True)
+
+        return {
+            "project_id": pid,
+            "total": len(result),
+            "issues": result,
+            "cached_at": datetime.now(),
+        }
