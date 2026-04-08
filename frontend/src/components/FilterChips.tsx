@@ -13,8 +13,8 @@ export default function FilterChips({ filter, onClear, onClearAll }: Props) {
   if (!hasAny) return null
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-3">
-      <span className="text-xs text-gray-400 font-medium shrink-0">필터:</span>
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">적용 필터</span>
 
       {filter.statusGroup && (
         <Chip
@@ -41,7 +41,7 @@ export default function FilterChips({ filter, onClear, onClearAll }: Props) {
       <button
         type="button"
         onClick={onClearAll}
-        className="text-xs text-gray-400 hover:text-gray-600 underline ml-1 shrink-0"
+        className="ml-1 shrink-0 rounded-full px-2 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
       >
         전체 해제
       </button>
@@ -60,17 +60,17 @@ function Chip({
 }) {
   const cls =
     color === 'red'
-      ? 'bg-red-50 text-red-700 border-red-200'
-      : 'bg-blue-50 text-blue-700 border-blue-200'
+      ? 'border-rose-200 bg-rose-50 text-rose-700'
+      : 'border-slate-200 bg-slate-50 text-slate-700'
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${cls}`}
+      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${cls}`}
     >
       {label}
       <button
         type="button"
         onClick={onRemove}
-        className="ml-0.5 hover:opacity-70 focus:outline-none leading-none"
+        className="ml-0.5 leading-none text-current transition-opacity hover:opacity-70 focus:outline-none"
         aria-label={`${label} 필터 제거`}
       >
         ×

@@ -96,7 +96,7 @@ function AttachmentList({ attachments, baseUrl }: { attachments: IssueAttachment
             href={buildRedmineAssetProxyUrl(attachment.content_url, baseUrl)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition-colors hover:border-slate-300"
+            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm transition-colors hover:border-slate-300"
           >
             <div className="min-w-0">
               <div className="truncate font-medium text-slate-800">{attachment.filename}</div>
@@ -125,7 +125,7 @@ function JournalTimeline({ journals, baseUrl }: { journals: JournalEntry[]; base
         return (
           <div key={journal.id ?? index} className="relative pl-5">
             <div className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-slate-300" />
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm shadow-slate-200/10">
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-medium text-slate-800">{journal.user || '시스템'}</div>
                 <div className="text-[11px] text-slate-400">{formatDateTime(journal.created_on)}</div>
@@ -152,6 +152,32 @@ function JournalTimeline({ journals, baseUrl }: { journals: JournalEntry[]; base
   )
 }
 
+function CollapsibleSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm shadow-slate-200/10">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</h3>
+        <span className="text-xs text-slate-400">{open ? '접기' : '보기'}</span>
+      </button>
+      {open ? <div className="mt-4">{children}</div> : null}
+    </section>
+  )
+}
+
 function InfoGrid({ detail }: { detail: IssueDetail }) {
   const items = [
     { label: '담당자', value: detail.assigned_to ?? '미할당' },
@@ -168,7 +194,7 @@ function InfoGrid({ detail }: { detail: IssueDetail }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {items.map((item) => (
-        <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+        <div key={item.label} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 shadow-sm shadow-slate-200/10">
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{item.label}</div>
           <div className="mt-1 text-sm text-slate-800">{item.value}</div>
         </div>
@@ -226,7 +252,7 @@ function RecentOperationalChanges({ journals }: { journals: JournalEntry[] }) {
   return (
     <section>
       <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">최근 운영 변경</h3>
-      <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+      <div className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 shadow-sm shadow-slate-200/10">
         {changes.map((change, index) => (
           <div key={`${change.label}-${index}`} className="text-sm text-slate-700">
             <span className="font-medium text-slate-900">{change.label}</span>
@@ -318,9 +344,9 @@ export default function IssueDetailDrawer({ issueId, onClose, onSelectIssue }: P
                 <>
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-xs font-semibold text-slate-400">#{detail.id}</div>
-                    <Badge tone={getStatusTone(detail.status_group)}>{detail.status}</Badge>
-                    {detail.priority ? <Badge tone={getPriorityTone(detail.priority)}>{getPriorityLabel(detail.priority)}</Badge> : null}
-                    <Badge tone="neutral">진행 {detail.done_ratio}%</Badge>
+                    <Badge tone={getStatusTone(detail.status_group)} size="md">{detail.status}</Badge>
+                    {detail.priority ? <Badge tone={getPriorityTone(detail.priority)} size="md">{getPriorityLabel(detail.priority)}</Badge> : null}
+                    <Badge tone="neutral" size="md">진행 {detail.done_ratio}%</Badge>
                   </div>
                   <h2 className="mt-3 text-lg font-semibold leading-tight text-slate-900">{detail.subject}</h2>
                 </>
@@ -349,7 +375,7 @@ export default function IssueDetailDrawer({ issueId, onClose, onSelectIssue }: P
           </div>
         </div>
 
-        <div className="space-y-6 px-5 py-5">
+        <div className="space-y-5 px-5 py-5">
           {loading && !detail ? (
             <div className="space-y-3">
               {Array.from({ length: 6 }).map((_, index) => (
@@ -368,11 +394,15 @@ export default function IssueDetailDrawer({ issueId, onClose, onSelectIssue }: P
             <>
               <InfoGrid detail={detail} />
               <RecentOperationalChanges journals={detail.journals} />
-              <RelatedIssues detail={detail} onSelectIssue={onSelectIssue} />
+              {detail.related_issues.length > 0 ? (
+                <CollapsibleSection title="관련 이슈">
+                  <RelatedIssues detail={detail} onSelectIssue={onSelectIssue} />
+                </CollapsibleSection>
+              ) : null}
 
               <section>
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">설명</h3>
-                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 shadow-sm shadow-slate-200/10">
                   <IssueRichContent
                     html={detail.description_html}
                     raw={detail.description}
@@ -381,14 +411,15 @@ export default function IssueDetailDrawer({ issueId, onClose, onSelectIssue }: P
                 </div>
               </section>
 
-              <AttachmentList attachments={detail.attachments} baseUrl={detail.redmine_base_url} />
+              {detail.attachments.length > 0 ? (
+                <CollapsibleSection title="첨부파일">
+                  <AttachmentList attachments={detail.attachments} baseUrl={detail.redmine_base_url} />
+                </CollapsibleSection>
+              ) : null}
 
-              <section>
-                <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">이력</h3>
-                <div className="mt-3">
-                  <JournalTimeline journals={detail.journals} baseUrl={detail.redmine_base_url} />
-                </div>
-              </section>
+              <CollapsibleSection title="이력">
+                <JournalTimeline journals={detail.journals} baseUrl={detail.redmine_base_url} />
+              </CollapsibleSection>
             </>
           ) : null}
         </div>

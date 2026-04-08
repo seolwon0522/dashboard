@@ -6,6 +6,7 @@ interface Props {
   tone?: DashboardTone
   children: ReactNode
   className?: string
+  size?: 'sm' | 'md'
 }
 
 const TONE_CLASS: Record<DashboardTone, string> = {
@@ -16,12 +17,18 @@ const TONE_CLASS: Record<DashboardTone, string> = {
   success: 'bg-emerald-100 text-emerald-700 border-emerald-200',
 }
 
-export default function Badge({ tone = 'neutral', children, className = '' }: Props) {
+const SIZE_CLASS = {
+  sm: 'px-2 py-0.5 text-[11px]',
+  md: 'px-2.5 py-1 text-xs',
+} as const
+
+export default function Badge({ tone = 'neutral', children, className = '', size = 'sm' }: Props) {
   return (
     <span
       className={[
-        'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap',
+        'inline-flex items-center rounded-full border font-semibold whitespace-nowrap',
         TONE_CLASS[tone],
+        SIZE_CLASS[size],
         className,
       ].join(' ')}
     >

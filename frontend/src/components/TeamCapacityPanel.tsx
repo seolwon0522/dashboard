@@ -2,11 +2,12 @@
 
 import Badge from '@/components/Badge'
 import SectionCard from '@/components/SectionCard'
-import type { CapacityMemberModel } from '@/lib/dashboard'
+import type { CapacityMemberModel, DashboardThresholdSettings } from '@/lib/dashboard'
 import type { AssigneeFilter } from '@/types/dashboard'
 
 interface Props {
   members: CapacityMemberModel[]
+  settings: DashboardThresholdSettings
   activeAssignee: AssigneeFilter | null
   onSelectAssignee: (assignee: AssigneeFilter | null) => void
 }
@@ -23,11 +24,12 @@ function getBandLabel(band: CapacityMemberModel['band']) {
   return '안정'
 }
 
-export default function TeamCapacityPanel({ members, activeAssignee, onSelectAssignee }: Props) {
+export default function TeamCapacityPanel({ members, settings, activeAssignee, onSelectAssignee }: Props) {
   return (
     <SectionCard
       title="팀 작업 여력"
-      subtitle="담당자별 과부하 신호, 임박 일정, 최근 완료를 한 번에 볼 수 있도록 압축했습니다."
+      subtitle={`${settings.overloadThreshold}건 기준으로 부하와 점검 신호를 함께 봅니다.`}
+      density="primary"
       bodyClassName="p-0"
     >
       {members.length === 0 ? (
@@ -38,13 +40,13 @@ export default function TeamCapacityPanel({ members, activeAssignee, onSelectAss
             <thead className="bg-slate-50/80 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
               <tr>
                 <th className="px-4 py-3 text-left">담당자</th>
-                <th className="px-4 py-3 text-right">활성</th>
+                <th className="px-4 py-3 text-left">활성 / 부하</th>
                 <th className="px-4 py-3 text-left">신호</th>
-                <th className="px-4 py-3 text-right">최근 완료 7일</th>
+                <th className="px-4 py-3 text-right">상태</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">
-              {members.slice(0, 10).map((member) => {
+              {members.slice(0, 15).map((member) => {
                 const isActive = activeAssignee?.id === member.assignee.id
 
                 return (
@@ -67,8 +69,18 @@ export default function TeamCapacityPanel({ members, activeAssignee, onSelectAss
                         <Badge tone={getBandTone(member.band)}>{getBandLabel(member.band)}</Badge>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right align-top text-sm font-semibold text-slate-800">
-                      {member.openCount}
+                    <td className="px-4 py-3 align-top">
+                      <div className="text-sm font-semibold text-slate-800">{member.openCount}건</div>
+                      <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+                        <div
+                          className={[
+                            'h-1.5 rounded-full',
+                            member.band === 'stretched' ? 'bg-rose-500' : member.band === 'watch' ? 'bg-amber-500' : 'bg-emerald-500',
+                          ].join(' ')}
+                          style={{ width: `${Math.min(100, Math.round(member.utilizationRate * 100))}%` }}
+                        />
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">기준 대비 {Math.round(member.utilizationRate * 100)}%</div>
                     </td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex flex-wrap gap-1.5">
@@ -83,8 +95,9 @@ export default function TeamCapacityPanel({ members, activeAssignee, onSelectAss
                         </Badge>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right align-top text-sm text-slate-600">
-                      {member.closedRecentlyCount}
+                    <td className="px-4 py-3 text-right align-top">
+                      <div className="text-sm font-semibold text-slate-800">{getBandLabel(member.band)}</div>
+                      <div className="mt-1 text-xs text-slate-500">최근 갱신 {Math.round(member.recentUpdateRate * 100)}%</div>
                     </td>
                   </tr>
                 )

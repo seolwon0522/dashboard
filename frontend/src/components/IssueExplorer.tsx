@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Badge from '@/components/Badge'
 import FilterChips from '@/components/FilterChips'
 import SectionCard from '@/components/SectionCard'
-import { getIssueSignals, type ExplorerPresetModel } from '@/lib/dashboard'
+import { evaluateIssueRisk, getIssueSignals, type DashboardThresholdSettings, type ExplorerPresetModel } from '@/lib/dashboard'
 import {
   PRIORITY_ORDER,
   STATUS_GROUP_LABEL,
@@ -18,6 +18,7 @@ type SortDir = 'asc' | 'desc'
 
 interface Props {
   issues: IssueListItem[]
+  settings: DashboardThresholdSettings
   loading?: boolean
   selectedIssueId: number | null
   filter: DashboardFilter
@@ -44,15 +45,20 @@ function getPriorityTone(priority: string | null) {
   return 'neutral'
 }
 
-function formatDue(issue: IssueListItem) {
-  if (issue.is_overdue) {
-    return { label: `지연 ${issue.days_overdue}일`, tone: 'danger' as const }
+function formatDue(issue: IssueListItem, settings: DashboardThresholdSettings) {
+  const risk = evaluateIssueRisk(issue, settings)
+
+  if (risk.isOverdue) {
+    return { label: `지연 ${risk.daysOverdue}일`, tone: 'danger' as const }
   }
-  if (issue.days_until_due === 0) {
+  if (risk.daysUntilDue === 0) {
     return { label: '오늘 마감', tone: 'warning' as const }
   }
-  if (issue.days_until_due !== null && issue.days_until_due > 0) {
-    return { label: `${issue.days_until_due}일 남음`, tone: issue.days_until_due <= 3 ? 'warning' as const : 'neutral' as const }
+  if (risk.daysUntilDue !== null && risk.daysUntilDue > 0) {
+    return {
+      label: `${risk.daysUntilDue}일 남음`,
+      tone: risk.daysUntilDue <= settings.dueSoonDays ? 'warning' as const : 'neutral' as const,
+    }
   }
   return { label: issue.due_date ?? '마감일 없음', tone: 'neutral' as const }
 }
@@ -64,8 +70,26 @@ function formatUpdated(daysSinceUpdate: number | null, updatedOn: string | null)
   return `${daysSinceUpdate}일 전`
 }
 
+function SortLabel({
+  label,
+  active,
+  dir,
+}: {
+  label: string
+  active: boolean
+  dir: SortDir
+}) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span>{label}</span>
+      {active ? <span className="text-slate-700">{dir === 'asc' ? '↑' : '↓'}</span> : null}
+    </span>
+  )
+}
+
 export default function IssueExplorer({
   issues,
+  settings,
   loading,
   selectedIssueId,
   filter,
@@ -121,13 +145,13 @@ export default function IssueExplorer({
           comparison = (PRIORITY_ORDER[left.priority ?? ''] ?? 0) - (PRIORITY_ORDER[right.priority ?? ''] ?? 0)
           break
         case 'due':
-          comparison = (left.days_until_due ?? 999) - (right.days_until_due ?? 999)
-          if (left.is_overdue || right.is_overdue) {
-            comparison = (right.days_overdue ?? 0) - (left.days_overdue ?? 0)
+          comparison = (evaluateIssueRisk(left, settings).daysUntilDue ?? 999) - (evaluateIssueRisk(right, settings).daysUntilDue ?? 999)
+          if (evaluateIssueRisk(left, settings).isOverdue || evaluateIssueRisk(right, settings).isOverdue) {
+            comparison = evaluateIssueRisk(right, settings).daysOverdue - evaluateIssueRisk(left, settings).daysOverdue
           }
           break
         case 'updated':
-          comparison = (left.days_since_update ?? 999) - (right.days_since_update ?? 999)
+          comparison = (evaluateIssueRisk(left, settings).daysSinceUpdate ?? 999) - (evaluateIssueRisk(right, settings).daysSinceUpdate ?? 999)
           break
         case 'progress':
           comparison = left.done_ratio - right.done_ratio
@@ -136,7 +160,7 @@ export default function IssueExplorer({
 
       return sortDir === 'asc' ? comparison : -comparison
     })
-  }, [searchedIssues, sortDir, sortKey])
+  }, [searchedIssues, settings, sortDir, sortKey])
 
   const totalPages = Math.max(1, Math.ceil(sortedIssues.length / PAGE_SIZE))
   const pageItems = sortedIssues.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -153,8 +177,9 @@ export default function IssueExplorer({
   return (
     <SectionCard
       title="이슈 탐색기"
-      subtitle="필터 기반으로 점검, 후속 조치, 내부 상세 확인까지 이어지는 작업 화면입니다."
-      aside={<Badge tone="neutral">{issues.length}건 표시</Badge>}
+      subtitle="우선 처리할 이슈를 정리합니다."
+      aside={<Badge tone="info" size="md">작업 영역 · {issues.length}건</Badge>}
+      density="primary"
       bodyClassName="space-y-4"
     >
       <div className="flex flex-wrap gap-2">
@@ -169,7 +194,7 @@ export default function IssueExplorer({
                 'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
                 isActive
                   ? 'border-slate-900 bg-slate-900 text-white'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900',
+                  : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white hover:text-slate-900',
               ].join(' ')}
             >
               {preset.label} <span className="ml-1 text-[11px] opacity-80">{preset.count}</span>
@@ -202,7 +227,7 @@ export default function IssueExplorer({
             className="w-80 rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
           />
         </div>
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-slate-400">
           {searchedIssues.length}건
           {search.trim() ? ` · "${search.trim()}" 검색 결과` : ''}
         </div>
@@ -212,17 +237,29 @@ export default function IssueExplorer({
         <div className="flex items-center justify-center py-16 text-sm text-slate-400">이슈를 불러오는 중...</div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm shadow-slate-200/10">
             <table className="min-w-[1080px] w-full text-sm">
               <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('subject')}>이슈</th>
+                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('subject')}>
+                    <SortLabel label="이슈" active={sortKey === 'subject'} dir={sortDir} />
+                  </th>
                   <th className="px-4 py-3 text-left">위험</th>
-                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('priority')}>상태</th>
-                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('assignee')}>담당자</th>
-                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('due')}>마감</th>
-                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('updated')}>업데이트</th>
-                  <th className="px-4 py-3 text-right cursor-pointer" onClick={() => toggleSort('progress')}>진행률</th>
+                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('priority')}>
+                    <SortLabel label="상태" active={sortKey === 'priority'} dir={sortDir} />
+                  </th>
+                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('assignee')}>
+                    <SortLabel label="담당자" active={sortKey === 'assignee'} dir={sortDir} />
+                  </th>
+                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('due')}>
+                    <SortLabel label="마감" active={sortKey === 'due'} dir={sortDir} />
+                  </th>
+                  <th className="px-4 py-3 text-left cursor-pointer" onClick={() => toggleSort('updated')}>
+                    <SortLabel label="업데이트" active={sortKey === 'updated'} dir={sortDir} />
+                  </th>
+                  <th className="px-4 py-3 text-right cursor-pointer" onClick={() => toggleSort('progress')}>
+                    <SortLabel label="진행률" active={sortKey === 'progress'} dir={sortDir} />
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -234,8 +271,10 @@ export default function IssueExplorer({
                   </tr>
                 ) : (
                   pageItems.map((issue) => {
-                    const signals = getIssueSignals(issue)
-                    const due = formatDue(issue)
+                    const signals = getIssueSignals(issue, settings)
+                    const visibleSignals = signals.slice(0, 2)
+                    const hiddenSignalCount = Math.max(0, signals.length - visibleSignals.length)
+                    const due = formatDue(issue, settings)
 
                     return (
                       <tr
@@ -257,14 +296,15 @@ export default function IssueExplorer({
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex max-w-[220px] flex-wrap gap-1.5">
-                            {signals.length > 0 ? signals.map((signal) => (
+                            {visibleSignals.length > 0 ? visibleSignals.map((signal) => (
                               <Badge key={`${issue.id}-${signal.label}`} tone={signal.tone}>{signal.label}</Badge>
-                            )) : <span className="text-xs text-slate-300">위험 신호 없음</span>}
+                            )) : <span className="text-xs text-slate-300">신호 없음</span>}
+                            {hiddenSignalCount > 0 ? <span className="text-xs text-slate-400">+{hiddenSignalCount}</span> : null}
                           </div>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1.5">
-                            <Badge tone={getStatusTone(issue.status_group)}>{issue.status}</Badge>
+                            <Badge tone={getStatusTone(issue.status_group)} size="md">{issue.status}</Badge>
                             {issue.priority ? (
                               <Badge tone={getPriorityTone(issue.priority)}>{getPriorityLabel(issue.priority)}</Badge>
                             ) : null}
@@ -273,7 +313,7 @@ export default function IssueExplorer({
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-700">{issue.assigned_to ?? '미할당'}</td>
                         <td className="px-4 py-3">
-                          <Badge tone={due.tone}>{due.label}</Badge>
+                          <Badge tone={due.tone} size="md">{due.label}</Badge>
                           {issue.due_date ? <div className="mt-1 text-xs text-slate-500">{issue.due_date}</div> : null}
                         </td>
                         <td className="px-4 py-3">

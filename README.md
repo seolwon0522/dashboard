@@ -66,7 +66,6 @@ dashboard/
 │   ├── client/
 │   │   └── redmine_client.py
 │   ├── core/
-│   │   ├── cache.py
 │   │   └── config.py
 │   ├── schemas/
 │   │   └── dashboard.py
@@ -80,33 +79,52 @@ dashboard/
     ├── next.config.mjs
     ├── package.json
     ├── tailwind.config.ts
-    └── src/
-        ├── app/
-        │   ├── globals.css
-        │   ├── layout.tsx
-        │   ├── page.tsx
-        │   └── dashboard/
-        │       └── [projectId]/page.tsx
-        ├── components/
-        │   ├── ActionRequiredPanel.tsx
-        │   ├── Badge.tsx
-        │   ├── DashboardView.tsx
-        │   ├── FilterChips.tsx
-        │   ├── HealthPanel.tsx
-        │   ├── IssueDetailDrawer.tsx
-        │   ├── IssueExplorer.tsx
-        │   ├── IssueRichContent.tsx
-        │   ├── KpiRow.tsx
-        │   ├── ProjectSelect.tsx
-        │   ├── SectionCard.tsx
-        │   └── TeamCapacityPanel.tsx
-        ├── lib/
-        │   ├── api.ts
-        │   ├── dashboard.ts
-        │   ├── labels.ts
-        │   └── redmineAssets.ts
-        └── types/
-            └── dashboard.ts
+  └── src/
+    ├── app/
+    │   ├── globals.css
+    │   ├── layout.tsx
+    │   ├── page.tsx
+    │   └── dashboard/
+    │       └── [projectId]/
+    │           ├── layout.tsx
+    │           ├── page.tsx
+    │           ├── issues/page.tsx
+    │           ├── team/page.tsx
+    │           └── settings/page.tsx
+    ├── components/
+    │   ├── AssigneeInsightsPanel.tsx
+    │   ├── Badge.tsx
+    │   ├── FilterChips.tsx
+    │   ├── IssueDetailDrawer.tsx
+    │   ├── IssueExplorer.tsx
+    │   ├── IssueRichContent.tsx
+    │   ├── ProjectSelect.tsx
+    │   ├── SectionCard.tsx
+    │   ├── TeamCapacityPanel.tsx
+    │   ├── issues/IssueSplitView.tsx
+    │   ├── overview/HomeActionQueue.tsx
+    │   ├── overview/HomeFocusCard.tsx
+    │   ├── settings/SettingsOverviewSection.tsx
+    │   ├── settings/ThresholdSettingsForm.tsx
+    │   ├── shell/DashboardProjectLayout.tsx
+    │   └── team/TeamOverviewSection.tsx
+    ├── hooks/
+    │   └── useDashboardProjectData.ts
+    ├── lib/
+    │   ├── api.ts
+    │   ├── dashboard.ts
+    │   ├── dashboard/
+    │   │   ├── date.ts
+    │   │   ├── insights.ts
+    │   │   ├── model.ts
+    │   │   ├── scoring.ts
+    │   │   ├── settings.ts
+    │   │   └── thresholds.ts
+    │   ├── labels.ts
+    │   └── redmineAssets.ts
+    └── types/
+      ├── dashboard.ts
+      └── dashboard-derived.ts
 ```
 
 ## 아키텍처 요약
@@ -128,18 +146,24 @@ dashboard/
 
 ### 프론트엔드
 
-프론트엔드는 `DashboardView`가 데이터 로딩과 필터 상태를 관리하고, 실제 운영 지표 계산은 `frontend/src/lib/dashboard.ts`에 모아둡니다.
+프론트엔드는 project shell이 공통 데이터 로딩과 설정 상태를 관리하고, 각 route가 화면별 상태만 소유합니다. 실제 운영 지표 계산은 `frontend/src/lib/dashboard.ts`와 `frontend/src/lib/dashboard/` 하위 모듈에 모아둡니다.
 
 이 계층이 담당하는 일:
 
-- KPI 카드 모델 생성
-- 조치 필요 큐 계산
-- 담당자별 과부하 점수 계산
-- 프로젝트 상태 점수 계산
-- 주간 흐름 및 aging bucket 계산
+- 공통 프로젝트 데이터 fetch / refresh
+- Home, Issues, Team, Settings route 간 공통 shell/context 제공
+- KPI/상태 스냅샷/조치 큐/팀 인사이트/상태 점수 계산
+- 임계값 설정의 localStorage 저장 및 재계산
 - 이슈 탐색기 preset / signal 계산
 
 즉, UI 컴포넌트는 되도록 표시만 담당하고, 계산 로직은 변환 레이어로 모읍니다.
+
+현재 route 구조:
+
+- `/dashboard/[projectId]`: action-first Home
+- `/dashboard/[projectId]/issues`: 이슈 작업 화면
+- `/dashboard/[projectId]/team`: 담당자/팀 분석
+- `/dashboard/[projectId]/settings`: 임계값과 점수 기준 설정
 
 ## 현재 대시보드 정보 구조
 
@@ -355,11 +379,15 @@ API_BASE_URL=http://your-backend-host:8000
 
 | 파일 | 역할 |
 |---|---|
-| `DashboardView.tsx` | 데이터 로딩, 필터 상태, 전체 레이아웃 |
-| `KpiRow.tsx` | KPI 카드 영역 |
-| `ActionRequiredPanel.tsx` | 즉시 조치 큐 |
+| `shell/DashboardProjectLayout.tsx` | 프로젝트 공통 shell, nav, settings/context |
+| `overview/HomeFocusCard.tsx` | Home 상단 focus 카드 |
+| `overview/HomeActionQueue.tsx` | Home 즉시 조치 큐 |
+| `issues/IssueSplitView.tsx` | Issues route 상태와 상세 드로어 연결 |
+| `team/TeamOverviewSection.tsx` | Team route 상태와 팀 분석 조합 |
+| `settings/SettingsOverviewSection.tsx` | Settings route 래퍼 |
+| `settings/ThresholdSettingsForm.tsx` | 임계값/가중치 폼 본체 |
 | `TeamCapacityPanel.tsx` | 담당자별 압축 workload |
-| `HealthPanel.tsx` | 프로젝트 상태와 흐름 |
+| `AssigneeInsightsPanel.tsx` | 담당자 성향 태그와 근거 패널 |
 | `IssueExplorer.tsx` | 운영용 이슈 탐색기 |
 | `IssueDetailDrawer.tsx` | 내부 상세 드로어 |
 | `IssueRichContent.tsx` | Redmine 본문/메모 렌더링 |
