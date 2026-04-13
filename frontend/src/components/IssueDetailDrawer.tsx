@@ -4,13 +4,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import Badge from '@/components/Badge'
 import { fetchIssueDetail } from '@/lib/api'
+import { evaluateIssueRisk, getIssueSignals, type DashboardThresholdSettings } from '@/lib/dashboard'
 import { RELATION_LABEL, getPriorityLabel } from '@/lib/labels'
 import { buildRedmineAssetProxyUrl } from '@/lib/redmineAssets'
-import type { IssueAttachment, IssueDetail, JournalEntry } from '@/types/dashboard'
+import type { IssueAttachment, IssueDetail, IssueListItem, JournalEntry } from '@/types/dashboard'
 import IssueRichContent from './IssueRichContent'
 
 interface Props {
   issueId: number | null
+  settings: DashboardThresholdSettings
   onClose: () => void
   onSelectIssue: (issueId: number) => void
 }
@@ -81,6 +83,111 @@ function renderChange(change: JournalEntry['changes'][number]) {
       <span className="text-slate-800">{formatValue(change.new_value)}</span>
     </div>
   )
+}
+
+function toIssueListItem(detail: IssueDetail): IssueListItem {
+  return {
+    id: detail.id,
+    subject: detail.subject,
+    status: detail.status,
+    status_group: detail.status_group,
+    priority: detail.priority,
+    assigned_to: detail.assigned_to,
+    assigned_to_id: detail.assigned_to_id,
+    author: detail.author,
+    tracker: detail.tracker,
+    due_date: detail.due_date,
+    created_on: detail.created_on,
+    updated_on: detail.updated_on,
+    done_ratio: detail.done_ratio,
+    is_overdue: false,
+    days_overdue: 0,
+    is_due_soon: false,
+    days_until_due: null,
+    is_stale: false,
+    days_since_update: null,
+    url: detail.url,
+  }
+}
+
+function getOperationalSummary(detail: IssueDetail, settings: DashboardThresholdSettings) {
+  const issue = toIssueListItem(detail)
+  const risk = evaluateIssueRisk(issue, settings)
+  const signals = getIssueSignals(issue, settings)
+
+  if (risk.isOverdue) {
+    return {
+      tone: risk.isLongOverdue ? 'danger' as const : 'warning' as const,
+      headline: `마감이 ${risk.daysOverdue}일 지연된 상태입니다.`,
+      action: '지연 사유를 먼저 확인하고, 담당자와 마감 일정을 바로 다시 정리하는 편이 좋습니다.',
+      helper: detail.assigned_to
+        ? `${detail.assigned_to} 담당으로 잡혀 있으니 일정 재합의 또는 병목 제거가 우선입니다.`
+        : '담당자가 비어 있으면 일정 재정리 전에 소유권부터 정해야 합니다.',
+      signals,
+    }
+  }
+
+  if (risk.isStale && risk.daysSinceUpdate !== null) {
+    return {
+      tone: 'warning' as const,
+      headline: `${risk.daysSinceUpdate}일 동안 업데이트가 끊긴 작업입니다.`,
+      action: '현재 실제로 진행 중인지, 아니면 막혀 있는지부터 짧게 확인해야 합니다.',
+      helper: detail.assigned_to
+        ? `${detail.assigned_to} 담당 작업이라 중간 확인 요청이 가장 빠른 개입입니다.`
+        : '담당자가 정해지지 않았다면 정체 해소보다 먼저 담당 배정이 필요합니다.',
+      signals,
+    }
+  }
+
+  if (risk.isDueSoon && risk.daysUntilDue !== null) {
+    return {
+      tone: 'warning' as const,
+      headline: risk.daysUntilDue === 0 ? '오늘 마감 예정인 작업입니다.' : `${risk.daysUntilDue}일 안에 마감이 다가옵니다.`,
+      action: '이번 주 안에 끝낼 수 있는지 확인하고, 어렵다면 지금 일정 조정 여부를 판단해야 합니다.',
+      helper: detail.done_ratio > 0
+        ? `현재 진행률 ${detail.done_ratio}% 기준으로 남은 작업량이 일정 안에 들어오는지 확인하세요.`
+        : '아직 진척이 거의 없으면 일정 리스크가 빠르게 커질 수 있습니다.',
+      signals,
+    }
+  }
+
+  if (detail.assigned_to_id === null && detail.status_group !== 'closed') {
+    return {
+      tone: 'neutral' as const,
+      headline: '담당자가 정해지지 않은 작업입니다.',
+      action: '진행 여부를 보기 전에 먼저 소유권을 정해야 실제 후속 조치가 가능해집니다.',
+      helper: '미할당 상태가 길어질수록 일정과 업데이트 신호가 함께 악화되기 쉽습니다.',
+      signals,
+    }
+  }
+
+  if (detail.priority === 'Immediate' || detail.priority === 'Urgent' || detail.priority === 'High') {
+    return {
+      tone: 'danger' as const,
+      headline: '우선순위가 높은 작업입니다.',
+      action: '다른 지연 신호가 없더라도 이번 사이클 안에서 처리 순서를 다시 확인하는 편이 좋습니다.',
+      helper: '같은 담당자에게 급한 작업이 겹치면 팀 화면에서 분산 여부까지 함께 보는 것이 안전합니다.',
+      signals,
+    }
+  }
+
+  if (detail.status_group === 'closed') {
+    return {
+      tone: 'success' as const,
+      headline: '이미 마감된 작업입니다.',
+      action: '최근 완료 흐름과 변경 이력만 확인하면 충분합니다.',
+      helper: '재오픈 징후가 있는지, 마지막 변경에서 담당이나 마감 조정이 있었는지만 보면 됩니다.',
+      signals,
+    }
+  }
+
+  return {
+    tone: 'info' as const,
+    headline: '지금은 대표 위험 신호가 크지 않은 작업입니다.',
+    action: '진행률, 최근 업데이트, 관련 이슈만 짧게 확인하면 됩니다.',
+    helper: '급한 신호가 커지면 이 화면보다 작업 목록에서 먼저 상단으로 올라오게 됩니다.',
+    signals,
+  }
 }
 
 function AttachmentList({ attachments, baseUrl }: { attachments: IssueAttachment[]; baseUrl: string }) {
@@ -203,6 +310,54 @@ function InfoGrid({ detail }: { detail: IssueDetail }) {
   )
 }
 
+function OperationalSummary({ detail, settings }: { detail: IssueDetail; settings: DashboardThresholdSettings }) {
+  const summary = useMemo(() => getOperationalSummary(detail, settings), [detail, settings])
+
+  return (
+    <section className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 shadow-sm shadow-slate-200/10">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">운영 요약</div>
+          <div className="mt-2 text-base font-semibold text-slate-950">{summary.headline}</div>
+        </div>
+        <Badge tone={summary.tone} size="md">우선 판단</Badge>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-white bg-white px-4 py-4">
+        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">권장 액션</div>
+        <div className="mt-2 text-sm leading-6 text-slate-900">{summary.action}</div>
+        <div className="mt-2 text-sm leading-6 text-slate-500">{summary.helper}</div>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-white bg-white px-4 py-4">
+          <div className="text-xs uppercase tracking-[0.12em] text-slate-400">담당 상태</div>
+          <div className="mt-2 text-sm font-semibold text-slate-950">{detail.assigned_to ?? '미할당'}</div>
+          <div className="mt-1 text-xs text-slate-500">소유권 기준 첫 판단</div>
+        </div>
+        <div className="rounded-2xl border border-white bg-white px-4 py-4">
+          <div className="text-xs uppercase tracking-[0.12em] text-slate-400">마감</div>
+          <div className="mt-2 text-sm font-semibold text-slate-950">{detail.due_date ?? '미설정'}</div>
+          <div className="mt-1 text-xs text-slate-500">일정 재조정 필요 여부</div>
+        </div>
+        <div className="rounded-2xl border border-white bg-white px-4 py-4">
+          <div className="text-xs uppercase tracking-[0.12em] text-slate-400">최근 업데이트</div>
+          <div className="mt-2 text-sm font-semibold text-slate-950">{formatDateTime(detail.updated_on)}</div>
+          <div className="mt-1 text-xs text-slate-500">진행 신선도 확인용</div>
+        </div>
+      </div>
+
+      {summary.signals.length > 0 ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {summary.signals.map((signal) => (
+            <Badge key={signal.label} tone={signal.tone}>{signal.label}</Badge>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 function RelatedIssues({ detail, onSelectIssue }: { detail: IssueDetail; onSelectIssue: (issueId: number) => void }) {
   if (detail.related_issues.length === 0) return null
 
@@ -268,7 +423,7 @@ function RecentOperationalChanges({ journals }: { journals: JournalEntry[] }) {
   )
 }
 
-export default function IssueDetailDrawer({ issueId, onClose, onSelectIssue }: Props) {
+export default function IssueDetailDrawer({ issueId, settings, onClose, onSelectIssue }: Props) {
   const [detail, setDetail] = useState<IssueDetail | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -392,6 +547,7 @@ export default function IssueDetailDrawer({ issueId, onClose, onSelectIssue }: P
 
           {!loading && !error && detail ? (
             <>
+              <OperationalSummary detail={detail} settings={settings} />
               <InfoGrid detail={detail} />
               <RecentOperationalChanges journals={detail.journals} />
               {detail.related_issues.length > 0 ? (

@@ -22,6 +22,7 @@ ENV/
 .env
 .env.local
 .env.*.local
+config.runtime.json
 
 # pytest
 .pytest_cache/

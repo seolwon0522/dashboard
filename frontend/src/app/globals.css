@@ -4,9 +4,36 @@
 @tailwind utilities;
 
 /* 전체 배경색 설정 */
+:root {
+  --app-bg: #f5f7fb;
+  --app-surface: #ffffff;
+  --app-surface-muted: #f9fbfd;
+  --app-line: #e6ebf1;
+  --app-line-strong: #d7e0ea;
+  --app-text: #191f28;
+  --app-text-subtle: #4e5968;
+  --app-text-muted: #8b95a1;
+  --app-primary: #3182f6;
+  --app-primary-soft: #eef6ff;
+}
+
+html {
+  background: var(--app-bg);
+}
+
 body {
-  background: linear-gradient(180deg, #f8fafc 0, #eef2f7 280px, #eef2f7 100%);
-  color: #0f172a;
+  background: radial-gradient(circle at top, rgba(49, 130, 246, 0.08), transparent 24%), var(--app-bg);
+  color: var(--app-text);
+  font-family: 'Pretendard Variable', 'Pretendard', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  letter-spacing: -0.012em;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(49, 130, 246, 0.16);
 }
 
 /* ── Issue Rich Content 스타일 ─────────────────────────────────────────────── */

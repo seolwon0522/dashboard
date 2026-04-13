@@ -11,32 +11,32 @@ interface Props {
 }
 
 const CONTAINER_CLASS = {
-  primary: 'rounded-[28px] border border-slate-200 bg-white shadow-sm shadow-slate-200/40',
-  secondary: 'rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/20',
-  compact: 'rounded-xl border border-slate-200 bg-white shadow-none',
+  primary: 'rounded-[24px] border border-[#e6ebf1] bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,0.22)]',
+  secondary: 'rounded-[20px] border border-[#e6ebf1] bg-white shadow-[0_8px_24px_-24px_rgba(15,23,42,0.18)]',
+  compact: 'rounded-[18px] border border-[#e6ebf1] bg-white shadow-none',
 } as const
 
 const HEADER_CLASS = {
-  primary: 'flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4',
-  secondary: 'flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4',
-  compact: 'flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3',
+  primary: 'flex items-start justify-between gap-4 border-b border-[#f0f4f8] px-6 py-5',
+  secondary: 'flex items-start justify-between gap-4 border-b border-[#f0f4f8] px-5 py-4.5',
+  compact: 'flex items-start justify-between gap-3 border-b border-[#f0f4f8] px-4 py-3.5',
 } as const
 
 const TITLE_CLASS = {
-  primary: 'text-base font-semibold tracking-tight text-slate-950',
-  secondary: 'text-[15px] font-semibold tracking-tight text-slate-950',
-  compact: 'text-sm font-semibold tracking-tight text-slate-950',
+  primary: 'text-[17px] font-semibold tracking-tight text-[#191f28]',
+  secondary: 'text-[15px] font-semibold tracking-tight text-[#191f28]',
+  compact: 'text-sm font-semibold tracking-tight text-[#191f28]',
 } as const
 
 const SUBTITLE_CLASS = {
-  primary: 'mt-1 max-w-3xl text-sm leading-6 text-slate-600',
-  secondary: 'mt-1 max-w-3xl text-sm leading-5 text-slate-600',
-  compact: 'mt-1 max-w-2xl text-xs leading-5 text-slate-500',
+  primary: 'mt-1.5 max-w-3xl text-sm leading-6 text-[#4e5968]',
+  secondary: 'mt-1.5 max-w-3xl text-sm leading-5 text-[#4e5968]',
+  compact: 'mt-1 max-w-2xl text-xs leading-5 text-[#8b95a1]',
 } as const
 
 const BODY_CLASS = {
-  primary: 'px-5 py-5',
-  secondary: 'px-5 py-4',
+  primary: 'px-6 py-6',
+  secondary: 'px-5 py-5',
   compact: 'px-4 py-4',
 } as const
 

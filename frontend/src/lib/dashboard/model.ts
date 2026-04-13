@@ -35,7 +35,7 @@ function buildSummaryCards(summary: DashboardSummary, issues: IssueListItem[], s
       id: 'attention',
       label: '긴급 조치 필요',
       value: String(attentionCount),
-      note: attentionCount > 0 ? '지연, 정체, 미할당, 고우선순위를 합산한 운영 큐' : '현재 기준에서는 긴급 큐가 비어 있습니다.',
+      note: attentionCount > 0 ? '지연, 정체, 미할당, 높은 우선순위가 겹친 항목' : '지금은 긴급 조치보다 흐름 유지 점검이 우선입니다.',
       tone: attentionCount > 0 ? 'warning' : 'success',
       preset: 'attention',
     },
@@ -43,7 +43,7 @@ function buildSummaryCards(summary: DashboardSummary, issues: IssueListItem[], s
       id: 'in_progress',
       label: '현재 진행 중',
       value: String(inProgressCount),
-      note: `활성 ${activeIssues.length}건 중 실제 진행 상태`,
+      note: `활성 ${activeIssues.length}건 중 실제로 움직이고 있는 작업`,
       tone: inProgressCount > 0 ? 'info' : 'neutral',
       statusGroup: 'in_progress',
     },
@@ -51,7 +51,7 @@ function buildSummaryCards(summary: DashboardSummary, issues: IssueListItem[], s
       id: 'weekly_check',
       label: '이번 주 확인 필요',
       value: String(weeklyCheckCount),
-      note: `${settings.dueSoonDays}일 이내 마감 또는 ${settings.staleDays}일 이상 정체`,
+      note: `${settings.dueSoonDays}일 이내 마감 또는 ${settings.staleDays}일 이상 정체된 작업`,
       tone: weeklyCheckCount > 0 ? 'warning' : 'success',
       preset: weeklyCheckCount > 0 ? 'due_soon' : 'closed_recently',
     },
@@ -59,7 +59,7 @@ function buildSummaryCards(summary: DashboardSummary, issues: IssueListItem[], s
       id: 'flow',
       label: `최근 ${settings.recentCompletionDays}일 처리 흐름`,
       value: `${flowBalance > 0 ? '+' : ''}${flowBalance}`,
-      note: `유입 ${recentCreatedCount}건 / 완료 ${recentCompletedCount}건`,
+      note: `유입 ${recentCreatedCount}건 대비 완료 ${recentCompletedCount}건`,
       tone: getToneForFlow(flowBalance),
       preset: 'closed_recently',
     },
@@ -68,8 +68,8 @@ function buildSummaryCards(summary: DashboardSummary, issues: IssueListItem[], s
   return {
     cards,
     headline: attentionCount > 0
-      ? `즉시 확인이 필요한 항목 ${attentionCount}건이 운영 큐에 잡혀 있습니다.`
-      : '긴급 큐는 비어 있지만, 현재 진행 중 작업과 다음 병목 후보를 함께 보는 편이 좋습니다.',
+      ? `오늘 바로 정리해야 할 운영 신호 ${attentionCount}건이 쌓여 있습니다.`
+      : '긴급 큐는 비어 있습니다. 지금은 진행 흐름과 다음 병목 후보를 짧게 확인하면 됩니다.',
   }
 }
 
@@ -85,7 +85,7 @@ function buildActions(issues: IssueListItem[], settings: DashboardThresholdSetti
     {
       id: 'overdue',
       label: '기한 초과 작업',
-      description: '지금 바로 마감 경로를 재정렬해야 하는 항목입니다.',
+      description: '마감이 이미 지난 작업입니다. 일정 재조정이나 담당 확인이 먼저 필요합니다.',
       count: overdueIssues.length,
       tone: overdueIssues.length > 0 ? 'danger' : 'success',
       issues: overdueIssues.sort((left, right) => evaluateIssueRisk(right, settings).daysOverdue - evaluateIssueRisk(left, settings).daysOverdue).slice(0, 5),
@@ -94,7 +94,7 @@ function buildActions(issues: IssueListItem[], settings: DashboardThresholdSetti
     {
       id: 'due_soon',
       label: '임박 일정',
-      description: '곧 마감되므로 이번 주 확인 대상에 올려야 하는 항목입니다.',
+      description: '이번 주 안에 다시 보지 않으면 지연으로 넘어갈 수 있는 작업입니다.',
       count: dueSoonIssues.length,
       tone: dueSoonIssues.length > 0 ? 'warning' : 'success',
       issues: dueSoonIssues.sort((left, right) => (evaluateIssueRisk(left, settings).daysUntilDue ?? 999) - (evaluateIssueRisk(right, settings).daysUntilDue ?? 999)).slice(0, 5),
@@ -103,7 +103,7 @@ function buildActions(issues: IssueListItem[], settings: DashboardThresholdSetti
     {
       id: 'stale',
       label: '정체 이슈',
-      description: '업데이트가 끊긴 작업으로 진행률과 담당 상태를 다시 확인해야 합니다.',
+      description: '업데이트가 끊긴 작업입니다. 현재 진행 여부와 막힌 지점을 다시 확인해야 합니다.',
       count: staleIssues.length,
       tone: staleIssues.length > 0 ? 'warning' : 'success',
       issues: staleIssues.sort((left, right) => (evaluateIssueRisk(right, settings).daysSinceUpdate ?? 0) - (evaluateIssueRisk(left, settings).daysSinceUpdate ?? 0)).slice(0, 5),
@@ -112,7 +112,7 @@ function buildActions(issues: IssueListItem[], settings: DashboardThresholdSetti
     {
       id: 'high_priority',
       label: '높은 우선순위',
-      description: '상시 주시해야 하는 우선순위 상단 이슈입니다.',
+      description: '우선순위가 높은 작업입니다. 다른 신호와 겹치면 먼저 처리해야 합니다.',
       count: highPriorityIssues.length,
       tone: highPriorityIssues.length > 0 ? 'danger' : 'neutral',
       issues: highPriorityIssues.slice(0, 5),
@@ -121,7 +121,7 @@ function buildActions(issues: IssueListItem[], settings: DashboardThresholdSetti
     {
       id: 'unassigned',
       label: '미할당 작업',
-      description: '실행 책임이 비어 있어 가장 먼저 소유권을 정해야 하는 항목입니다.',
+      description: '실행 책임이 비어 있습니다. 소유권부터 정해야 실제 진행이 시작됩니다.',
       count: unassignedIssues.length,
       tone: unassignedIssues.length > 0 ? 'warning' : 'success',
       issues: unassignedIssues.slice(0, 5),

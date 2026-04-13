@@ -9,10 +9,10 @@ interface Props {
 }
 
 export default function FilterChips({ filter, onClear, onClearAll }: Props) {
-  const hasAny = filter.statusGroup !== null || filter.assignee !== null || filter.preset !== null
+  const hasAny = filter.statusGroup !== null || filter.assignee !== null || filter.preset  !== null
   if (!hasAny) return null
 
-  return (
+  return ( 
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">적용 필터</span>
 

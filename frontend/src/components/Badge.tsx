@@ -10,16 +10,16 @@ interface Props {
 }
 
 const TONE_CLASS: Record<DashboardTone, string> = {
-  neutral: 'bg-slate-100 text-slate-600 border-slate-200',
-  info: 'bg-sky-100 text-sky-700 border-sky-200',
-  warning: 'bg-amber-100 text-amber-800 border-amber-200',
-  danger: 'bg-rose-100 text-rose-700 border-rose-200',
-  success: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  neutral: 'bg-[#f2f4f6] text-[#4e5968] border-[#e5e8eb]',
+  info: 'bg-[#eef6ff] text-[#1f6feb] border-[#d6e8ff]',
+  warning: 'bg-[#fff6e5] text-[#b86200] border-[#ffe2b8]',
+  danger: 'bg-[#fff0f0] text-[#d64545] border-[#ffd9d9]',
+  success: 'bg-[#edf9f2] text-[#0f8a4b] border-[#d4f0df]',
 }
 
 const SIZE_CLASS = {
-  sm: 'px-2 py-0.5 text-[11px]',
-  md: 'px-2.5 py-1 text-xs',
+  sm: 'px-2.5 py-1 text-[11px]',
+  md: 'px-3 py-1.5 text-xs',
 } as const
 
 export default function Badge({ tone = 'neutral', children, className = '', size = 'sm' }: Props) {

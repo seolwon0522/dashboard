@@ -171,7 +171,7 @@ class IssueService:
         issues = await self._fetch_project_issues(pid)
 
         today = date.today()
-        base_url = self._settings.redmine.base_url
+        base_url = self._client.base_url
         overdue_exclude = self._settings.get_excluded_status_ids(
             self._settings.dashboard.overdue_rule.exclude_status_groups
         )
@@ -219,7 +219,7 @@ class IssueService:
         issues = await self._fetch_project_issues(pid)
 
         today = date.today()
-        base_url = self._settings.redmine.base_url
+        base_url = self._client.base_url
         closed_ids = self._settings.get_excluded_status_ids(("closed",))
         overdue_exclude = self._settings.get_excluded_status_ids(
             self._settings.dashboard.overdue_rule.exclude_status_groups
@@ -309,7 +309,7 @@ class IssueService:
             ttl=60,  # 상세는 짧은 TTL
         )
 
-        base_url = self._settings.redmine.base_url
+        base_url = self._client.base_url
 
         # 기본 정보 정규화
         assigned = raw.get("assigned_to")

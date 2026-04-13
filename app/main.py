@@ -12,11 +12,20 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
 from app.api.v1.router import router as v1_router
-from app.client.redmine_client import RedmineClient
+from app.client.redmine_client import (
+    RedmineAuthenticationError,
+    RedmineClient,
+    RedmineConnectionError,
+    RedmineNotConfiguredError,
+    RedmineResponseError,
+    RedmineTimeoutError,
+)
 from app.core.cache import TTLCache
+from app.core.connection_store import RedmineConnectionStore
 from app.core.config import get_settings
 from app.services.issue_service import IssueService
 from app.services.project_service import ProjectService
+from app.services.redmine_connection_service import RedmineConnectionService
 from app.services.workload_service import WorkloadService
 
 # 로깅 설정
@@ -39,9 +48,18 @@ async def lifespan(app: FastAPI):
     # 인메모리 TTL 캐시 생성
     cache = TTLCache(default_ttl=settings.dashboard.cache_ttl_seconds)
 
+    # Redmine 연결 저장소 생성
+    connection_store = RedmineConnectionStore(settings)
+    app.state.redmine_connection_store = connection_store
+
     # Redmine 클라이언트 생성
-    redmine_client = RedmineClient(config=settings.redmine, http_client=http_client)
+    redmine_client = RedmineClient(connection_provider=connection_store.get_connection, http_client=http_client)
     app.state.redmine_client = redmine_client
+    app.state.redmine_connection_service = RedmineConnectionService(
+        store=connection_store,
+        client=redmine_client,
+        cache=cache,
+    )
 
     # 서비스 객체 생성 → app.state에 저장
     app.state.issue_service = IssueService(client=redmine_client, cache=cache, settings=settings)
@@ -49,7 +67,7 @@ async def lifespan(app: FastAPI):
     app.state.workload_service = WorkloadService(client=redmine_client, cache=cache, settings=settings)
     app.state.cache = cache
 
-    logger.info("서비스 초기화 완료. 서버 시작")
+    logger.info("서비스 초기화 완료. 서버 시작 (redmine_source=%s)", connection_store.get_source())
 
     yield
 
@@ -80,24 +98,51 @@ app.include_router(v1_router)
 
 # ── Redmine API 관련 글로벌 예외 핸들러 ──
 
-@app.exception_handler(httpx.HTTPStatusError)
-async def redmine_http_error_handler(request: Request, exc: httpx.HTTPStatusError):
+@app.exception_handler(RedmineNotConfiguredError)
+async def redmine_not_configured_handler(request: Request, exc: RedmineNotConfiguredError):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Redmine connection is not configured."},
+    )
+
+
+@app.exception_handler(RedmineAuthenticationError)
+async def redmine_auth_error_handler(request: Request, exc: RedmineAuthenticationError):
+    return JSONResponse(
+        status_code=502,
+        content={"detail": "Redmine authentication failed."},
+    )
+
+
+@app.exception_handler(RedmineResponseError)
+async def redmine_http_error_handler(request: Request, exc: RedmineResponseError):
     """Redmine API가 4xx/5xx 응답을 반환한 경우 502로 변환"""
-    logger.error("Redmine API 오류: %s %s", exc.response.status_code, exc.request.url)
+    logger.error("Redmine API 오류: %s", exc.status_code)
     return JSONResponse(
         status_code=502,
-        content={"detail": f"Redmine 서버 오류 ({exc.response.status_code})"},
+        content={"detail": f"Redmine server error ({exc.status_code})"},
     )
 
 
-@app.exception_handler(httpx.ConnectError)
-async def redmine_connect_error_handler(request: Request, exc: httpx.ConnectError):
+async def _redmine_connect_error_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={"detail": "Unable to reach the Redmine server."},
+    )
+
+
+@app.exception_handler(RedmineConnectionError)
+async def redmine_connect_error_handler(request: Request, exc: RedmineConnectionError):
     """Redmine 서버 연결 실패 시 502 반환"""
-    logger.error("Redmine 연결 실패: %s", exc)
-    return JSONResponse(
-        status_code=502,
-        content={"detail": "Redmine 서버에 연결할 수 없습니다"},
-    )
+    logger.error("Redmine 연결 실패")
+    return await _redmine_connect_error_response()
+
+
+@app.exception_handler(RedmineTimeoutError)
+async def redmine_timeout_error_handler(request: Request, exc: RedmineTimeoutError):
+    """Redmine 응답 지연 시 502 반환"""
+    logger.error("Redmine 응답 지연")
+    return await _redmine_connect_error_response()
 
 
 @app.get("/health", tags=["system"])

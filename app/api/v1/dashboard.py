@@ -96,7 +96,7 @@ async def proxy_redmine_asset(
     url: str = Query(..., description="Redmine asset absolute URL"),
     client: RedmineClient = Depends(get_redmine_client),
 ):
-    """Redmine 보호 리소스를 API 키로 프록시"""
+    """Redmine 보호 리소스를 현재 연결 설정으로 프록시"""
     try:
         response = await client.fetch_asset(url)
     except ValueError as exc:

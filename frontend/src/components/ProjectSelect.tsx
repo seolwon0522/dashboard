@@ -11,15 +11,15 @@ interface Props {
 
 export default function ProjectSelect({ projects, selectedId, onChange }: Props) {
   return (
-    <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 shadow-sm shadow-slate-200/40 backdrop-blur">
-      <label htmlFor="project-select" className="whitespace-nowrap text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+    <div className="flex items-center gap-2 rounded-[16px] border border-[#e6ebf1] bg-[#f9fbfd] px-3 py-2">
+      <label htmlFor="project-select" className="whitespace-nowrap text-xs font-semibold text-[#8b95a1]">
         프로젝트
       </label>
       <select
         id="project-select"
         value={selectedId ?? ''}
         onChange={(e) => onChange(e.target.value || undefined)}
-        className="min-w-[180px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+        className="min-w-[180px] rounded-[12px] border border-[#e6ebf1] bg-white px-3 py-2 text-sm font-medium text-[#191f28] outline-none transition focus:border-[#b2d4ff] focus:ring-4 focus:ring-[#eef6ff]"
       >
         <option value="" disabled>프로젝트 선택</option>
         {projects.map((p) => (

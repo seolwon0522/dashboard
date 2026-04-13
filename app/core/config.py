@@ -10,8 +10,12 @@ from pathlib import Path
 @dataclass(frozen=True)
 class RedmineConfig:
     """Redmine 서버 연결 설정"""
+
     base_url: str
-    api_key: str
+    auth_type: str = "api_key"
+    api_key: str | None = None
+    username: str | None = None
+    password: str | None = None
     timeout: int = 30
     retry_attempts: int = 3
     page_size: int = 100
@@ -38,8 +42,9 @@ class DashboardConfig:
 @dataclass(frozen=True)
 class Settings:
     """전체 애플리케이션 설정"""
-    redmine: RedmineConfig
-    dashboard: DashboardConfig
+
+    redmine: RedmineConfig | None = None
+    dashboard: DashboardConfig = field(default_factory=lambda: DashboardConfig(default_project=""))
 
     def get_status_group(self, status_id: int) -> str | None:
         """상태 ID를 받아 소속 그룹명 반환. 미매핑 시 None"""
@@ -56,18 +61,26 @@ class Settings:
         return excluded
 
 
+def _parse_redmine_config(raw: dict | None) -> RedmineConfig | None:
+    if not raw:
+        return None
+
+    return RedmineConfig(
+        base_url=(raw.get("base_url") or "").rstrip("/"),
+        auth_type=raw.get("auth_type", "api_key"),
+        api_key=raw.get("api_key"),
+        username=raw.get("username"),
+        password=raw.get("password"),
+        timeout=raw.get("timeout", 30),
+        retry_attempts=raw.get("retry_attempts", 3),
+        page_size=raw.get("page_size", 100),
+    )
+
+
 def _parse_config(raw: dict) -> Settings:
     """원본 dict를 Settings 객체로 변환"""
-    redmine_raw = raw["redmine"]
+    redmine = _parse_redmine_config(raw.get("redmine"))
     dash_raw = raw["dashboard"]
-
-    redmine = RedmineConfig(
-        base_url=redmine_raw["base_url"].rstrip("/"),
-        api_key=redmine_raw["api_key"],
-        timeout=redmine_raw.get("timeout", 30),
-        retry_attempts=redmine_raw.get("retry_attempts", 3),
-        page_size=redmine_raw.get("page_size", 100),
-    )
 
     overdue_raw = dash_raw.get("overdue_rule", {})
     overdue_rule = OverdueRule(
@@ -100,8 +113,6 @@ def get_settings() -> Settings:
         raw = json.load(f)
 
     # 필수 키 검증
-    if "redmine" not in raw:
-        raise KeyError("config.json에 'redmine' 섹션이 없습니다")
     if "dashboard" not in raw:
         raise KeyError("config.json에 'dashboard' 섹션이 없습니다")
 

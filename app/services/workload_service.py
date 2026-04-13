@@ -114,7 +114,7 @@ class WorkloadService:
 
         today = date.today()
         closed_ids = self._settings.get_excluded_status_ids(("closed",))
-        base_url = self._settings.redmine.base_url
+        base_url = self._client.base_url
 
         issues = []
         overdue_count = 0

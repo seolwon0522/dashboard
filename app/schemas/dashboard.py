@@ -27,6 +27,14 @@ class ProjectIssueCount(BaseModel):
     id: str
     name: str
     open_issues: int = 0
+    overdue_issues: int = 0
+    stale_issues: int = 0
+    unassigned_issues: int = 0
+    high_priority_issues: int = 0
+    due_soon_issues: int = 0
+    risk_score: int = 0
+    risk_level: str = "stable"
+    primary_reason: str = "활성 작업량 기준으로 먼저 볼 수 있는 프로젝트"
 
 
 class ProjectListResponse(BaseModel):

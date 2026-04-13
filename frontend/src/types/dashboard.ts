@@ -15,6 +15,14 @@ export interface ProjectItem {
   id: string
   name: string
   open_issues: number
+  overdue_issues: number
+  stale_issues: number
+  unassigned_issues: number
+  high_priority_issues: number
+  due_soon_issues: number
+  risk_score: number
+  risk_level: 'stable' | 'warning' | 'critical'
+  primary_reason: string
 }
 
 export interface ProjectListResponse {

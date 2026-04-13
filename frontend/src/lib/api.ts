@@ -6,18 +6,37 @@ import type {
   IssueListResponse,
   MemberIssuesResponse,
   ProjectListResponse,
+  
   WorkloadResponse,
 } from '@/types/dashboard'
+import type {
+  RedmineConnectionDeleteResponse,
+  RedmineConnectionPayload,
+  RedmineConnectionSaveResponse,
+  RedmineConnectionStatusResponse,
+  RedmineConnectionTestResponse,
+} from '@/types/redmine-connection'
 
 // 공통 fetch 래퍼: 에러 시 명확한 메시지 반환
-async function apiFetch<T>(path: string): Promise<T> {
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers)
   const res = await fetch(path, {
-    // 캐시하지 않음 — 항상 최신 데이터 요청
     cache: 'no-store',
+    ...init,
+    headers,
   })
 
   if (!res.ok) {
-    throw new Error(`API 오류 [${res.status}]: ${path}`)
+    let message = `API 오류 [${res.status}]: ${path}`
+
+    try {
+      const data = await res.json() as { detail?: string; message?: string }
+      message = data.detail ?? data.message ?? message
+    } catch {
+      message = `API 오류 [${res.status}]: ${path}`
+    }
+
+    throw new Error(message)
   }
 
   return res.json() as Promise<T>
@@ -73,4 +92,34 @@ export async function fetchMemberIssues(
 // 단일 이슈 상세 + 변경 이력(journals) 조회
 export async function fetchIssueDetail(issueId: number): Promise<IssueDetail> {
   return apiFetch(`/api/v1/dashboard/issues/${issueId}`)
+}
+
+export async function fetchConnectionStatus(): Promise<RedmineConnectionStatusResponse> {
+  return apiFetch('/api/v1/redmine/connection-status')
+}
+
+export async function testRedmineConnection(payload: RedmineConnectionPayload): Promise<RedmineConnectionTestResponse> {
+  return apiFetch('/api/v1/redmine/test-connection', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function saveRedmineConnection(payload: RedmineConnectionPayload): Promise<RedmineConnectionSaveResponse> {
+  return apiFetch('/api/v1/redmine/save-connection', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteRedmineConnection(): Promise<RedmineConnectionDeleteResponse> {
+  return apiFetch('/api/v1/redmine/connection', {
+    method: 'DELETE',
+  })
 }

@@ -17,7 +17,7 @@ export function isRedmineAssetPath(value: string, baseUrl: string): boolean {
   if (!value) return false
   if (value.startsWith('#') || value.startsWith('mailto:') || value.startsWith('tel:')) {
     return false
-  }
+  }  
 
   const absoluteUrl = buildAbsoluteRedmineUrl(value, baseUrl)
 

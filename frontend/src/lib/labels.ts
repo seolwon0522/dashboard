@@ -20,6 +20,13 @@ export const ISSUE_PRESET_LABEL: Record<string, string> = {
   closed_recently: '최근 완료 7일',
 }
 
+export const DASHBOARD_NAV_LABEL = {
+  home: '홈',
+  issues: '작업',
+  team: '팀',
+  settings: '설정',
+} as const
+
 export const RELATION_LABEL: Record<string, string> = {
   parent: '상위 이슈',
   child: '하위 이슈',

@@ -22,6 +22,24 @@ interface DetailState {
   data: AssigneeJournalInsight | null
 }
 
+function getRecommendedAction(insight: AssigneeTendencyInsight) {
+  const tagLabels = insight.tendencyTags.map((tag) => tag.label)
+
+  if (tagLabels.includes('장기 보유 비중 높음')) {
+    return '중간 체크포인트를 더 자주 잡고, 오래 묶인 작업의 막힌 지점을 먼저 확인하세요.'
+  }
+
+  if (tagLabels.includes('병렬 작업량 높음')) {
+    return '동시에 잡고 있는 작업 수를 줄일 수 있는지 확인하고, 급한 항목부터 재배치하세요.'
+  }
+
+  if (tagLabels.includes('마감 안정') || tagLabels.includes('처리 속도 빠름')) {
+    return '현재 방식은 유지하되, 급한 작업이 새로 몰릴 때만 우선순위 재조정이 필요한지 확인하세요.'
+  }
+
+  return '진행 상황이 끊기지 않는지, 최근 업데이트와 담당 범위를 함께 점검하세요.'
+}
+
 function Sparkline({ values }: { values: number[] }) {
   const maxValue = Math.max(...values, 1)
 
@@ -41,7 +59,7 @@ function Sparkline({ values }: { values: number[] }) {
 
 function DetailPanel({ detail, onSelectIssue }: { detail: AssigneeJournalInsight; onSelectIssue: (issueId: number) => void }) {
   return (
-    <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+    <div className="space-y-5 rounded-[24px] border border-slate-200 bg-slate-50/80 px-4 py-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
           <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">표본 이슈</div>
@@ -61,7 +79,7 @@ function DetailPanel({ detail, onSelectIssue }: { detail: AssigneeJournalInsight
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
         <div className="text-sm font-semibold text-slate-900">추가 관찰</div>
         <div className="mt-2 flex flex-wrap gap-2">
           {detail.observations.length > 0 ? detail.observations.map((observation) => (
@@ -79,7 +97,7 @@ function DetailPanel({ detail, onSelectIssue }: { detail: AssigneeJournalInsight
               key={issue.id}
               type="button"
               onClick={() => onSelectIssue(issue.id)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs text-slate-700 transition-colors hover:border-slate-300"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-left text-xs text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
             >
               <div className="font-semibold text-slate-900">#{issue.id}</div>
               <div className="mt-1 max-w-[220px] truncate">{issue.subject}</div>
@@ -190,7 +208,7 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
           bodyClassName="space-y-4"
         >
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-            선택한 담당자에 표시할 작업 패턴이 없습니다.
+            선택한 담당자에게는 아직 뚜렷한 작업 패턴 신호가 없습니다. 팀 전체 우선 확인 목록에서 다른 담당자를 먼저 보는 편이 더 유효합니다.
           </div>
         </SectionCard>
       )
@@ -201,22 +219,23 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
     return (
       <SectionCard
         title="선택한 작업 패턴"
-        subtitle="선택한 담당자의 현재 작업 흐름과 근거를 확인합니다."
+        subtitle="선택한 담당자의 현재 작업 흐름, 근거, 권장 관리 액션을 함께 확인합니다."
         aside={<Badge tone="info" size="md">활성 {focusedInsight.activeCount}건</Badge>}
         density="primary"
         bodyClassName="space-y-5"
       >
-        <div className="rounded-[24px] border border-slate-900 bg-slate-950 px-5 py-5 text-white shadow-[0_18px_40px_-30px_rgba(15,23,42,0.85)]">
+        <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-5">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-lg font-semibold text-white">{focusedInsight.assignee.name}</div>
-              <p className="mt-2 text-sm leading-6 text-slate-200">{focusedInsight.interpretation}</p>
+              <div className="text-lg font-semibold text-slate-950">{focusedInsight.assignee.name}</div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{focusedInsight.interpretation}</p>
             </div>
+            <Badge tone="info" size="md">활성 {focusedInsight.activeCount}건</Badge>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-1.5">
             {focusedInsight.tendencyTags.slice(0, 2).map((tag) => (
-              <Badge key={`${focusedInsight.key}-${tag.label}`} tone={tag.tone} className="border-white/10 bg-white/10 text-white">{tag.label}</Badge>
+              <Badge key={`${focusedInsight.key}-${tag.label}`} tone={tag.tone}>{tag.label}</Badge>
             ))}
           </div>
         </div>
@@ -231,6 +250,11 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="rounded-[24px] border border-amber-100 bg-amber-50 px-4 py-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">권장 관리 액션</div>
+          <div className="mt-2 text-sm leading-6 text-amber-900">{getRecommendedAction(focusedInsight)}</div>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm shadow-slate-200/20">
@@ -257,7 +281,7 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
   return (
     <SectionCard
       title="팀 전체 작업 패턴"
-      subtitle="점검이 필요한 흐름을 먼저 고르고, 선택한 담당자를 우측에서 자세히 확인합니다."
+      subtitle="점검이 필요한 흐름을 먼저 고르고, 선택 후에는 담당자별 관리 액션까지 이어서 확인합니다."
       aside={<Badge tone="info" size="md">운영 관찰</Badge>}
       density="secondary"
       bodyClassName="space-y-4"
@@ -272,19 +296,19 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
             return (
               <Fragment key={insight.key}>
                 <article className={[
-                  'rounded-2xl border px-4 py-4 transition-colors',
+                  'rounded-[24px] border px-4 py-4 transition-colors',
                   isSelected
-                    ? 'border-slate-900 bg-slate-900 text-white shadow-sm shadow-slate-200/30'
+                    ? 'border-slate-300 bg-slate-50 shadow-sm shadow-slate-200/40'
                     : 'border-slate-200 bg-white shadow-sm shadow-slate-100',
                 ].join(' ')}>
                   <button type="button" onClick={() => toggleInsight(insight)} className="w-full text-left">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className={['text-lg font-semibold', isSelected ? 'text-white' : 'text-slate-950'].join(' ')}>{insight.assignee.name}</div>
-                        <p className={['mt-2 text-sm leading-6', isSelected ? 'text-slate-200' : 'text-slate-600'].join(' ')}>{insight.interpretation}</p>
+                        <div className="text-lg font-semibold text-slate-950">{insight.assignee.name}</div>
+                        <p className="mt-2 text-sm leading-6 text-slate-600">{insight.interpretation}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <Badge tone={isSelected ? 'neutral' : 'info'} className={isSelected ? 'border-white/10 bg-white/10 text-white' : ''}>활성 {insight.activeCount}건</Badge>
+                        <Badge tone={isSelected ? 'neutral' : 'info'}>활성 {insight.activeCount}건</Badge>
                       </div>
                     </div>
 
@@ -294,7 +318,9 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
                       ))}
                     </div>
 
-                    <div className={['mt-4 text-xs font-medium', isSelected ? 'text-slate-300' : 'text-slate-500'].join(' ')}>선택해 우측에서 보기</div>
+                    <div className="mt-4 text-xs font-medium text-slate-500">
+                      권장 액션: {getRecommendedAction(insight)}
+                    </div>
                   </button>
                 </article>
               </Fragment>
