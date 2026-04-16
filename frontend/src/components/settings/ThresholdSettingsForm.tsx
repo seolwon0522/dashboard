@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 
-import Badge from '@/components/Badge'
 import { getPresetLabel, type DashboardScoreWeights, type DashboardThresholdSettings, type ThresholdPresetMode } from '@/lib/dashboard'
 
 export type NumericSettingKey = 'staleDays' | 'dueSoonDays' | 'recentActivityDays' | 'recentCompletionDays' | 'overloadThreshold' | 'longOverdueDays'
@@ -23,25 +22,25 @@ const SETTING_CONTROLS: Array<{
   min: number
   max: number
 }> = [
-  { key: 'staleDays', label: '정체 기준', description: '이 일수 이상 업데이트가 없으면 정체로 봅니다.', impact: '값을 낮추면 정체 경고가 더 빨리 잡히고, 높이면 더 늦게 잡힙니다.', min: 3, max: 30 },
-  { key: 'dueSoonDays', label: '임박 일정 기준', description: '이 일수 이내 마감이면 확인 대상으로 올립니다.', impact: '값을 높이면 더 많은 작업이 이번 주 확인 대상으로 올라옵니다.', min: 1, max: 21 },
-  { key: 'recentActivityDays', label: '최근 활동 기준', description: '이 일수 이내 갱신이면 최근 활동으로 봅니다.', impact: '값을 높이면 최근 갱신으로 인정되는 범위가 넓어집니다.', min: 1, max: 21 },
-  { key: 'recentCompletionDays', label: '최근 완료 기준', description: '이 일수 이내 완료를 보너스와 흐름 계산에 씁니다.', impact: '값을 높이면 최근 완료 흐름이 더 길게 반영됩니다.', min: 1, max: 30 },
-  { key: 'overloadThreshold', label: '담당자 과부하 기준', description: '활성 이슈 수가 이 기준을 넘기면 부하를 경고합니다.', impact: '값을 낮추면 과부하 담당자가 더 빨리 잡히고, 높이면 경고가 줄어듭니다.', min: 1, max: 20 },
-  { key: 'longOverdueDays', label: '장기 지연 기준', description: '장기 지연 추가 패널티를 줄 임계값입니다.', impact: '값을 낮추면 오래 지연된 작업이 더 빨리 높은 위험으로 분류됩니다.', min: 3, max: 45 },
+  { key: 'staleDays', label: '정체 기준', description: '이 기간 이상 업데이트가 없으면 정체로 봅니다.', impact: '값을 낮추면 정체 경고가 더 빨리 보이고, 높이면 늦게 보입니다.', min: 3, max: 30 },
+  { key: 'dueSoonDays', label: '임박 일정 기준', description: '이 기간 안에 마감되면 우선 확인 대상으로 올립니다.', impact: '값을 높이면 이번 주 확인할 이슈가 더 넓게 잡힙니다.', min: 1, max: 21 },
+  { key: 'recentActivityDays', label: '최근 활동 기준', description: '이 기간 안에 갱신되면 최근 활동으로 봅니다.', impact: '값을 높이면 최근 갱신으로 인정하는 범위가 넓어집니다.', min: 1, max: 21 },
+  { key: 'recentCompletionDays', label: '최근 완료 기준', description: '이 기간 안에 완료된 흐름을 최근 완료로 계산합니다.', impact: '값을 높이면 최근 완료 흐름이 더 오래 반영됩니다.', min: 1, max: 30 },
+  { key: 'overloadThreshold', label: '담당자 과부하 기준', description: '활성 이슈 수가 이 기준을 넘으면 과부하로 봅니다.', impact: '값을 낮추면 과부하 경고가 더 빨리 보이고, 높이면 경고가 줄어듭니다.', min: 1, max: 20 },
+  { key: 'longOverdueDays', label: '장기 지연 기준', description: '오래 지연된 이슈를 더 강하게 보기 위한 추가 기준입니다.', impact: '값을 낮추면 오래 지연된 이슈가 더 빨리 높은 위험으로 분류됩니다.', min: 3, max: 45 },
 ]
 
 const WEIGHT_CONTROLS: Array<{
   key: keyof DashboardScoreWeights
   label: string
 }> = [
-  { key: 'overduePenalty', label: '기한 초과 건당 감점' },
+  { key: 'overduePenalty', label: '기한 초과 감점' },
   { key: 'longOverduePenalty', label: '장기 지연 추가 감점' },
-  { key: 'stalePenalty', label: '정체 건당 감점' },
-  { key: 'unassignedPenalty', label: '미할당 건당 감점' },
-  { key: 'dueSoonPenalty', label: '임박 일정 건당 감점' },
-  { key: 'recentCompletionBonus', label: '최근 완료 건당 보너스' },
-  { key: 'flowBalanceWeight', label: '유입-완료 차이 가중치' },
+  { key: 'stalePenalty', label: '정체 감점' },
+  { key: 'unassignedPenalty', label: '미할당 감점' },
+  { key: 'dueSoonPenalty', label: '임박 일정 감점' },
+  { key: 'recentCompletionBonus', label: '최근 완료 보너스' },
+  { key: 'flowBalanceWeight', label: '유입 대비 완료 가중치' },
 ]
 
 const SETTING_GROUPS: Array<{
@@ -50,18 +49,18 @@ const SETTING_GROUPS: Array<{
   keys: NumericSettingKey[]
 }> = [
   {
-    title: '일정 관리',
-    description: '정체와 마감 기준을 조정합니다.',
+    title: '일정 기준',
+    description: '정체와 마감 관련 기준을 조정합니다.',
     keys: ['staleDays', 'dueSoonDays', 'longOverdueDays'],
   },
   {
-    title: '흐름 판단',
-    description: '최근 활동과 완료 흐름 기준입니다.',
+    title: '흐름 기준',
+    description: '최근 활동과 완료 흐름 기준을 조정합니다.',
     keys: ['recentActivityDays', 'recentCompletionDays'],
   },
   {
-    title: '담당자 부하',
-    description: '담당자 과부하 기준을 조정합니다.',
+    title: '담당자 기준',
+    description: '담당자 과부하 판단 기준을 조정합니다.',
     keys: ['overloadThreshold'],
   },
 ]
@@ -128,7 +127,7 @@ export default function ThresholdSettingsForm({
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-slate-900">프리셋</div>
-            <div className="mt-1 text-xs text-slate-500">전체 성향을 먼저 고른 뒤, 필요한 경우에만 세부 기준을 조정합니다.</div>
+            <div className="mt-1 text-xs text-slate-500">전체 기준 톤을 먼저 고른 뒤 필요한 값만 세부 조정하는 방식이 가장 안정적입니다.</div>
           </div>
           <button
             type="button"
@@ -138,31 +137,33 @@ export default function ThresholdSettingsForm({
             기본값 복원
           </button>
         </div>
+
         <div className="rounded-[20px] border border-slate-200 bg-white p-2">
           <div className="flex flex-wrap gap-2">
-          {(['conservative', 'default', 'relaxed'] as const).map((mode) => {
-            const active = settings.presetMode === mode
-            return (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => onApplyPreset(mode)}
-                className={[
-                  'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
-                  active
-                    ? 'border-white bg-slate-900 text-white'
-                    : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900',
-                ].join(' ')}
-              >
-                {getPresetLabel(mode)}
-              </button>
-            )
-          })}
+            {(['conservative', 'default', 'relaxed'] as const).map((mode) => {
+              const active = settings.presetMode === mode
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onApplyPreset(mode)}
+                  className={[
+                    'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
+                    active
+                      ? 'border-white bg-slate-900 text-white'
+                      : 'border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900',
+                  ].join(' ')}
+                >
+                  {getPresetLabel(mode)}
+                </button>
+              )
+            })}
           </div>
         </div>
 
         <div className="rounded-2xl border border-white bg-white px-4 py-4 text-sm leading-6 text-slate-600">
-          보수적 프리셋은 경고를 더 빨리 잡고, 완화 프리셋은 경고를 줄여서 노이즈를 낮춥니다. 운영 감각과 화면 신호가 크게 다를 때만 세부 값을 조정하는 편이 좋습니다.
+          보수적 프리셋은 경고를 더 빨리 보여주고, 완화 프리셋은 과도한 경고를 줄입니다.
+          운영 감각과 실제 화면 신호가 다를 때만 개별 값을 조정하는 편이 좋습니다.
         </div>
       </section>
 
@@ -189,8 +190,8 @@ export default function ThresholdSettingsForm({
       <section className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold text-slate-900">고급 점수 가중치</div>
-            <div className="mt-1 text-xs leading-5 text-slate-500">정말 필요한 경우에만 조정하세요. 대부분은 위 기준만으로 충분합니다.</div>
+            <div className="text-sm font-semibold text-slate-900">고급 가중치</div>
+            <div className="mt-1 text-xs leading-5 text-slate-500">세밀한 튜닝이 필요할 때만 조정하세요. 대부분은 위 기준만으로 충분합니다.</div>
           </div>
           <button
             type="button"
@@ -219,7 +220,7 @@ export default function ThresholdSettingsForm({
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
-            세부 점수 조정이 필요할 때만 펼쳐서 수정합니다.
+            세부 점수 조정이 필요할 때만 펼쳐서 수정하세요.
           </div>
         )}
       </section>

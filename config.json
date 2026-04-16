@@ -1,7 +1,7 @@
 {
   "redmine": {
     "base_url": "http://106.255.231.26:6080",
-    "api_key": "85c3a9a8e4b32b521fe69a38ec478faa29cdff87",
+    "api_key": "26f49a44b8e8658c8a081b0d44f60581f8a1d848",
     "timeout": 30,
     "retry_attempts": 3,
     "page_size": 100

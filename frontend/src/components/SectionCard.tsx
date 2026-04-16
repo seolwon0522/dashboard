@@ -17,8 +17,8 @@ const CONTAINER_CLASS = {
 } as const
 
 const HEADER_CLASS = {
-  primary: 'flex items-start justify-between gap-4 border-b border-[#f0f4f8] px-6 py-5',
-  secondary: 'flex items-start justify-between gap-4 border-b border-[#f0f4f8] px-5 py-4.5',
+  primary: 'flex items-start justify-between gap-3 border-b border-[#f0f4f8] px-5 py-4',
+  secondary: 'flex items-start justify-between gap-3 border-b border-[#f0f4f8] px-4 py-4',
   compact: 'flex items-start justify-between gap-3 border-b border-[#f0f4f8] px-4 py-3.5',
 } as const
 
@@ -35,8 +35,8 @@ const SUBTITLE_CLASS = {
 } as const
 
 const BODY_CLASS = {
-  primary: 'px-6 py-6',
-  secondary: 'px-5 py-5',
+  primary: 'px-5 py-5',
+  secondary: 'px-4 py-4',
   compact: 'px-4 py-4',
 } as const
 
@@ -54,12 +54,12 @@ export default function SectionCard({
       CONTAINER_CLASS[density],
       className,
     ].join(' ')}>
-      <div className={HEADER_CLASS[density]}>
-        <div className="min-w-0">
+      <div className={[HEADER_CLASS[density], 'flex-col sm:flex-row'].join(' ')}>
+        <div className="min-w-0 flex-1">
           <h2 className={TITLE_CLASS[density]}>{title}</h2>
           {subtitle ? <p className={SUBTITLE_CLASS[density]}>{subtitle}</p> : null}
         </div>
-        {aside ? <div className="shrink-0">{aside}</div> : null}
+        {aside ? <div className="w-full sm:w-auto sm:shrink-0">{aside}</div> : null}
       </div>
       <div className={[BODY_CLASS[density], bodyClassName].join(' ')}>{children}</div>
     </section>

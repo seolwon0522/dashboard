@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 
 import Badge from '@/components/Badge'
+import ScopeBadge from '@/components/ScopeBadge'
 import SectionCard from '@/components/SectionCard'
 import { fetchIssueDetail } from '@/lib/api'
 import { summarizeAssigneeJournalActivity, type AssigneeJournalInsight, type AssigneeTendencyInsight, type DashboardThresholdSettings } from '@/lib/dashboard'
@@ -201,9 +202,9 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
     if (!focusedInsight) {
       return (
         <SectionCard
-          title="선택한 작업 패턴"
-          subtitle="담당자를 선택하면 작업 흐름의 근거를 바로 확인할 수 있습니다."
-          aside={<Badge tone="info" size="md">패턴 근거</Badge>}
+          title="선택한 후속 점검 신호"
+          subtitle="담당자를 선택하면 실제 작업 흐름 근거와 후속 점검 포인트를 바로 확인할 수 있습니다."
+          aside={<ScopeBadge kind="advisory" label="후속 점검용 판단" />}
           density="primary"
           bodyClassName="space-y-4"
         >
@@ -218,9 +219,9 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
 
     return (
       <SectionCard
-        title="선택한 작업 패턴"
-        subtitle="선택한 담당자의 현재 작업 흐름, 근거, 권장 관리 액션을 함께 확인합니다."
-        aside={<Badge tone="info" size="md">활성 {focusedInsight.activeCount}건</Badge>}
+        title="선택한 후속 점검 신호"
+        subtitle="선택한 담당자가 바로 문제라는 뜻이 아니라, 후속 점검이 필요한지 판단할 근거와 관리 액션을 함께 확인합니다."
+        aside={<ScopeBadge kind="advisory" label="후속 점검용 판단" />}
         density="primary"
         bodyClassName="space-y-5"
       >
@@ -280,16 +281,16 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
 
   return (
     <SectionCard
-      title="팀 전체 작업 패턴"
-      subtitle="점검이 필요한 흐름을 먼저 고르고, 선택 후에는 담당자별 관리 액션까지 이어서 확인합니다."
-      aside={<Badge tone="info" size="md">운영 관찰</Badge>}
+      title="팀 후속 점검 신호"
+      subtitle="긴급 이슈 큐가 아니라 담당·부하 점검 후보를 보여주고, 선택 후에는 관련 근거와 후속 액션까지 이어서 확인합니다."
+      aside={<ScopeBadge kind="advisory" label="후속 점검용 판단" />}
       density="secondary"
       bodyClassName="space-y-4"
     >
       {insights.length === 0 ? (
         <div className="px-4 py-8 text-sm text-slate-400">작업 패턴을 읽을 데이터가 아직 충분하지 않습니다.</div>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {insights.map((insight) => {
             const isSelected = selectedKey === insight.key
 
@@ -319,7 +320,7 @@ export default function AssigneeInsightsPanel({ insights, settings, mode = 'cond
                     </div>
 
                     <div className="mt-4 text-xs font-medium text-slate-500">
-                      권장 액션: {getRecommendedAction(insight)}
+                      권장 후속 점검: {getRecommendedAction(insight)}
                     </div>
                   </button>
                 </article>

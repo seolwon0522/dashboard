@@ -4,6 +4,7 @@ Redmine REST API를 직접 조회해 운영 현황을 보여주는 경량 풀스
 
 - FastAPI 백엔드와 Next.js 프론트엔드로 구성됩니다.
 - 별도 DB나 Redis 없이 인메모리 TTL 캐시만 사용합니다.
+- Redmine 연결은 환경 변수, 레거시 `config.json`, 로컬 `config.runtime.json`, 첫 진입 UI 설정 흐름을 모두 지원합니다.
 - 기존 Redmine API 연동을 유지하면서, 단순 이슈 뷰어가 아니라 관리 판단용 운영 대시보드에 맞춰 리팩터링되어 있습니다.
 
 ## 핵심 방향
@@ -16,13 +17,14 @@ Redmine REST API를 직접 조회해 운영 현황을 보여주는 경량 풀스
 - 누가 과부하 상태인가
 - 프로젝트 흐름이 나아지고 있는가, 악화되고 있는가
 
-현재 UI는 다음 5개 레이어를 중심으로 구성됩니다.
+현재 UI는 다음 흐름을 중심으로 구성됩니다.
 
-1. 상단 운영 KPI
-2. 즉시 조치 필요 패널
-3. 팀 작업 여력 패널
-4. 프로젝트 상태 패널
-5. 이슈 탐색기 + 내부 상세 드로어
+1. Redmine 연결 확인 / 설정 화면
+2. 위험 우선순위 기반 프로젝트 선택 화면
+3. Home 요약과 즉시 조치 큐
+4. Issues 작업 화면 + 내부 상세 드로어
+5. Team 개입 우선순위와 작업 패턴
+6. Settings 임계값 / 가중치 조정
 
 ## 기술 스택
 
@@ -53,6 +55,7 @@ Redmine REST API를 직접 조회해 운영 현황을 보여주는 경량 풀스
 ```text
 dashboard/
 ├── config.json
+├── config.runtime.json
 ├── requirements.txt
 ├── README.md
 │
@@ -62,16 +65,20 @@ dashboard/
 │   │   └── v1/
 │   │       ├── dashboard.py
 │   │       ├── deps.py
+│   │       ├── redmine.py
 │   │       └── router.py
 │   ├── client/
 │   │   └── redmine_client.py
 │   ├── core/
-│   │   └── config.py
+│   │   ├── config.py
+│   │   └── connection_store.py
 │   ├── schemas/
-│   │   └── dashboard.py
+│   │   ├── dashboard.py
+│   │   └── redmine_connection.py
 │   └── services/
 │       ├── issue_service.py
 │       ├── project_service.py
+│       ├── redmine_connection_service.py
 │       ├── utils.py
 │       └── workload_service.py
 │
@@ -99,8 +106,14 @@ dashboard/
     │   ├── IssueExplorer.tsx
     │   ├── IssueRichContent.tsx
     │   ├── ProjectSelect.tsx
+    │   ├── ProjectSelectView.tsx
     │   ├── SectionCard.tsx
     │   ├── TeamCapacityPanel.tsx
+    │   ├── charts/
+    │   │   ├── ComparisonTrendChart.tsx
+    │   │   ├── GroupedWorkloadChart.tsx
+    │   │   └── HorizontalBarChart.tsx
+    │   ├── connection/RedmineConnectionSetup.tsx
     │   ├── issues/IssueSplitView.tsx
     │   ├── overview/HomeActionQueue.tsx
     │   ├── overview/HomeFocusCard.tsx
@@ -123,8 +136,9 @@ dashboard/
     │   ├── labels.ts
     │   └── redmineAssets.ts
     └── types/
-      ├── dashboard.ts
-      └── dashboard-derived.ts
+        ├── dashboard.ts
+        ├── dashboard-derived.ts
+        └── redmine-connection.ts
 ```
 
 ## 아키텍처 요약
@@ -146,7 +160,7 @@ dashboard/
 
 ### 프론트엔드
 
-프론트엔드는 project shell이 공통 데이터 로딩과 설정 상태를 관리하고, 각 route가 화면별 상태만 소유합니다. 실제 운영 지표 계산은 `frontend/src/lib/dashboard.ts`와 `frontend/src/lib/dashboard/` 하위 모듈에 모아둡니다.
+프론트엔드는 루트(`/`)에서 먼저 Redmine 연결 상태를 확인하고, 연결이 준비되면 프로젝트 선택 화면으로 진입합니다. 이후 project shell이 공통 데이터 로딩과 설정 상태를 관리하고, 각 route가 화면별 상태만 소유합니다. 실제 운영 지표 계산은 `frontend/src/lib/dashboard.ts`와 `frontend/src/lib/dashboard/` 하위 모듈에 모아둡니다.
 
 이 계층이 담당하는 일:
 
@@ -160,10 +174,67 @@ dashboard/
 
 현재 route 구조:
 
+- `/`: Redmine 연결 확인 또는 프로젝트 선택
 - `/dashboard/[projectId]`: action-first Home
 - `/dashboard/[projectId]/issues`: 이슈 작업 화면
 - `/dashboard/[projectId]/team`: 담당자/팀 분석
 - `/dashboard/[projectId]/settings`: 임계값과 점수 기준 설정
+
+Redmine 연결 소스 우선순위:
+
+1. 환경 변수 (`REDMINE_*`)
+2. 로컬 `config.runtime.json`
+3. 레거시 `config.json`
+
+환경 변수로 연결을 주입한 경우 UI에서는 값을 덮어쓰거나 삭제할 수 없습니다. 로컬 저장 흐름을 쓰는 경우 첫 진입 화면에서 테스트 후 저장한 값이 `config.runtime.json`에 기록됩니다.
+
+## 현재 화면 구조
+
+### 1. 연결 / 진입 화면
+
+루트 화면은 먼저 Redmine 연결 상태를 확인합니다.
+
+- 연결이 없거나 깨졌으면 `RedmineConnectionSetup` 표시
+- 연결이 정상이면 `ProjectSelectView` 표시
+- 프로젝트 목록은 open issue 수만이 아니라 `risk_score`, `risk_level`, `primary_reason` 기준으로 정렬
+
+### 2. Home
+
+Home은 장식형 대시보드가 아니라 “지금 무엇을 먼저 봐야 하는가”를 바로 정하는 화면입니다.
+
+- 오늘 운영 포커스
+- 즉시 조치 큐
+- 원인 빠른 확인
+- 필요할 때만 펼치는 상세 흐름
+
+### 3. Issues
+
+Issues는 원시 테이블이 아니라 운영용 작업 화면입니다.
+
+- 상단 처리 기준 브리핑
+- 우선 큐 분포 차트
+- attention 기준 정렬
+- 모바일 카드 / 데스크톱 테이블 이중 레이아웃
+- URL query 기반 preset / issueId 상태 유지
+- 내부 상세 드로어에서 운영 요약 우선 노출
+
+### 4. Team
+
+Team은 리소스 현황보다 “어디에 먼저 개입할지”에 집중합니다.
+
+- 팀 관리 브리핑
+- 빠른 개입 대상
+- 담당자별 작업 여력
+- 담당자 패턴 / 권장 액션 / 근거 이슈
+
+### 5. Settings
+
+Settings는 프리셋 선택 후 세부 조정으로 이어지는 흐름입니다.
+
+- 현재 기준 설명
+- 임계값 그룹별 조정
+- 고급 점수 가중치 토글
+- 변경 영향 범위 요약
 
 ## 현재 대시보드 정보 구조
 
@@ -265,6 +336,10 @@ Browser
 | `GET` | `/api/v1/dashboard/workload` | 담당자별 workload 집계 |
 | `GET` | `/api/v1/dashboard/workload/member` | 담당자별 이슈 목록 |
 | `GET` | `/api/v1/dashboard/assets` | Redmine 첨부/이미지 프록시 |
+| `GET` | `/api/v1/redmine/connection-status` | 현재 Redmine 연결 상태 조회 |
+| `POST` | `/api/v1/redmine/test-connection` | 입력한 연결 정보 테스트 |
+| `POST` | `/api/v1/redmine/save-connection` | 연결 정보 저장 |
+| `DELETE` | `/api/v1/redmine/connection` | 로컬 저장 연결 삭제 |
 
 ### `GET /api/v1/dashboard/issues`
 
@@ -302,21 +377,29 @@ Browser
 
 ## 실행 방법
 
-### 1. 설정 준비
+### 1. 의존성 설치
 
-`config.json`에 Redmine 연결 정보를 넣습니다.
+백엔드:
+
+```bash
+pip install -r requirements.txt
+```
+
+프론트엔드:
+
+```bash
+cd frontend
+npm install
+```
+
+### 2. 대시보드 기본 설정 준비
+
+`config.json`에는 최소한 `dashboard` 섹션이 필요합니다. Redmine 연결 정보는 여기 넣어도 되지만, 이제는 필수가 아닙니다.
 
 예시:
 
 ```json
 {
-  "redmine": {
-    "base_url": "http://your-redmine-host:port",
-    "api_key": "your_redmine_api_key",
-    "timeout": 30,
-    "retry_attempts": 3,
-    "page_size": 100
-  },
   "dashboard": {
     "default_project": "your-project-identifier",
     "include_subprojects": false,
@@ -334,10 +417,61 @@ Browser
 }
 ```
 
-### 2. 백엔드 실행
+### 3. Redmine 연결 준비
+
+연결 정보는 아래 세 방식 중 하나로 준비할 수 있습니다.
+
+#### 옵션 A. 환경 변수로 주입
+
+운영 환경에서 권장합니다.
 
 ```bash
-pip install -r requirements.txt
+REDMINE_BASE_URL=https://your-redmine-host
+REDMINE_AUTH_TYPE=api_key
+REDMINE_API_KEY=your_redmine_api_key
+```
+
+또는 Basic 인증:
+
+```bash
+REDMINE_BASE_URL=https://your-redmine-host
+REDMINE_AUTH_TYPE=basic
+REDMINE_USERNAME=your_username
+REDMINE_PASSWORD=your_password
+```
+
+#### 옵션 B. `config.json`에 레거시 기본값 제공
+
+개발 편의용으로만 권장합니다.
+
+```json
+{
+  "redmine": {
+    "base_url": "https://your-redmine-host",
+    "auth_type": "api_key",
+    "api_key": "your_redmine_api_key",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "page_size": 100
+  },
+  "dashboard": {}
+}
+```
+
+#### 옵션 C. 첫 진입 UI에서 저장
+
+아무 연결도 주입하지 않은 상태로 서버를 띄우면 `/`에서 연결 설정 화면이 열립니다.
+
+- Base URL 입력
+- 인증 방식 선택 (`api_key` 또는 `basic`)
+- 연결 테스트
+- 저장
+
+저장된 값은 로컬 전용 `config.runtime.json`에 기록되며 `.gitignore`로 제외됩니다.
+
+### 4. 백엔드 실행
+
+```bash
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -347,11 +481,10 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
 
-### 3. 프론트엔드 실행
+### 5. 프론트엔드 실행
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 
@@ -361,7 +494,7 @@ npm run dev
 - 백엔드: `http://localhost:8000`
 - Swagger: `http://localhost:8000/docs`
 
-### 4. 프론트엔드 프록시
+### 6. 프론트엔드 프록시
 
 `frontend/next.config.mjs`는 `/api/v1/*` 요청을 백엔드로 rewrite합니다.
 
@@ -380,6 +513,8 @@ API_BASE_URL=http://your-backend-host:8000
 | 파일 | 역할 |
 |---|---|
 | `shell/DashboardProjectLayout.tsx` | 프로젝트 공통 shell, nav, settings/context |
+| `connection/RedmineConnectionSetup.tsx` | Redmine 연결 테스트 / 저장 / 삭제 UI |
+| `ProjectSelectView.tsx` | 연결 후 프로젝트 진입 화면 |
 | `overview/HomeFocusCard.tsx` | Home 상단 focus 카드 |
 | `overview/HomeActionQueue.tsx` | Home 즉시 조치 큐 |
 | `issues/IssueSplitView.tsx` | Issues route 상태와 상세 드로어 연결 |
@@ -393,18 +528,20 @@ API_BASE_URL=http://your-backend-host:8000
 | `IssueRichContent.tsx` | Redmine 본문/메모 렌더링 |
 | `FilterChips.tsx` | 활성 필터 표시와 제거 |
 | `Badge.tsx` / `SectionCard.tsx` | 재사용 UI 프리미티브 |
+| `charts/*` | Home / Issues / Team 비교 차트 |
 
 ## 운영 신호 계산 기준
 
-현재 하드코딩된 기본 기준은 다음과 같습니다.
+기본 계산 기준은 백엔드와 프론트엔드에서 함께 사용됩니다.
 
 - `due soon`: 7일 이내 마감
 - `stale`: 7일 이상 업데이트 없음
 - `closed recently`: 최근 7일 내 완료
 - `health score`: overdue, stale, unassigned, recent flow balance 조합
 - `capacity band`: risk score 기반으로 안정 / 주의 / 과부하 분류
+- `project list risk`: overdue, stale, unassigned, high priority, due soon, open volume 조합
 
-이 기준은 `frontend/src/lib/dashboard.ts`와 `app/services/issue_service.py`에서 조정할 수 있습니다.
+이 기준은 `frontend/src/lib/dashboard/`와 `app/services/` 하위 모듈에서 조정할 수 있습니다.
 
 ## 현재 제한 사항
 
@@ -435,8 +572,10 @@ DB가 없기 때문에 장기 히스토리 기반 지표는 제한적입니다.
 
 ## 보안 및 운영 메모
 
-- `config.json`의 API 키는 민감 정보입니다.
-- 실제 운영 저장소에서는 커밋하지 않거나 배포 단계에서 주입하는 방식을 권장합니다.
+- `config.json`과 `config.runtime.json`에는 민감한 Redmine 인증 정보가 들어갈 수 있습니다.
+- 실제 운영에서는 가능하면 환경 변수 주입을 우선 사용하세요.
+- `config.runtime.json`은 로컬 전용 파일이며 `.gitignore`에 포함되어 있습니다.
+- 환경 변수로 관리된 연결은 UI에서 덮어쓰거나 삭제할 수 없습니다.
 - `assets` 프록시는 동일 Redmine origin만 허용하도록 구현되어 있습니다.
 
 ## 현재 버전 메모
@@ -444,11 +583,15 @@ DB가 없기 때문에 장기 히스토리 기반 지표는 제한적입니다.
 이번 리팩터링에서 반영된 핵심 변경:
 
 - 모니터링형 화면을 관리형 운영 대시보드로 재구성
+- Redmine 연결 상태 확인 / 저장 / 삭제 UI 추가
+- Redmine 인증을 API 키와 ID/비밀번호 방식 모두 지원하도록 확장
+- 프로젝트 선택 화면을 위험 우선순위 기반 진입 화면으로 재구성
 - KPI를 운영 신호 중심으로 교체
 - 가운데 영역을 즉시 조치 큐로 대체
 - workload를 담당자 위험 신호 중심으로 압축
 - 이슈 목록을 이슈 탐색기로 개편
 - 내부 상세 드로어에 관련 이슈/변경 이력/첨부 강화
+- Issues / Team / Settings를 더 밝고 단순한 제품형 UI로 재정리
 - 프론트엔드 변환 레이어를 분리해 로직과 표시를 명확히 구분
 
 ## 개발 확인 명령

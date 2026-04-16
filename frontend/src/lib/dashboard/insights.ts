@@ -64,6 +64,88 @@ function toEvidence(label: string, value: string): AssigneeEvidenceMetric {
   return { label, value }
 }
 
+function classifyBehavior(params: {
+  activeCount: number
+  sampleIssueCount: number
+  averageLeadTimeDays: number | null
+  staleShare: number
+  recentUpdateRate: number
+  onTimeRate: number | null
+  closedRecentlyCount: number
+  overloadThreshold: number
+}) {
+  const {
+    activeCount,
+    sampleIssueCount,
+    averageLeadTimeDays,
+    staleShare,
+    recentUpdateRate,
+    onTimeRate,
+    closedRecentlyCount,
+    overloadThreshold,
+  } = params
+
+  if (
+    averageLeadTimeDays !== null &&
+    averageLeadTimeDays <= 6 &&
+    (staleShare >= 0.25 || (onTimeRate !== null && onTimeRate < 0.75))
+  ) {
+    return {
+      behaviorType: 'fast_unstable' as const,
+      behaviorLabel: '단기 처리 편향',
+      behaviorSummary: '최근에는 처리 속도는 빠르지만 마감 안정성과 중간 갱신이 함께 흔들릴 수 있습니다.',
+      recommendedAction: '지연 직전 작업만 따로 묶어 짧게 점검하세요.',
+    }
+  }
+
+  if (
+    averageLeadTimeDays !== null &&
+    averageLeadTimeDays >= 10 &&
+    staleShare < 0.2 &&
+    (onTimeRate === null || onTimeRate >= 0.8)
+  ) {
+    return {
+      behaviorType: 'slow_stable' as const,
+      behaviorLabel: '장기 안정 처리',
+      behaviorSummary: '최근에는 속도는 느리지만 마감과 진행 흐름은 비교적 안정적으로 유지됩니다.',
+      recommendedAction: '장기 과제는 유지하고 급한 작업만 끼어들 때 재정렬하세요.',
+    }
+  }
+
+  if (
+    activeCount >= overloadThreshold &&
+    closedRecentlyCount <= Math.max(1, Math.floor(activeCount * 0.25))
+  ) {
+    return {
+      behaviorType: 'high_activity_low_completion' as const,
+      behaviorLabel: '동시 진행 과다',
+      behaviorSummary: '최근에는 동시에 잡은 작업이 많지만 완료 전환 속도는 충분히 따라오지 못하고 있습니다.',
+      recommendedAction: '동시 작업 수를 줄이고 끝낼 수 있는 항목부터 먼저 닫으세요.',
+    }
+  }
+
+  return {
+    behaviorType: 'balanced_operator' as const,
+    behaviorLabel: '현재 흐름 안정',
+    behaviorSummary: '현재는 작업량과 처리 흐름이 한쪽으로 크게 치우치지 않은 편입니다.',
+    recommendedAction: '현재 방식은 유지하고 새 고위험 작업만 선별해 보세요.',
+  }
+}
+
+function buildConfidenceLevel(sampleIssueCount: number, onTimeRate: number | null, averageLeadTimeDays: number | null) {
+  let score = 0
+
+  if (sampleIssueCount >= 12) score += 2
+  else if (sampleIssueCount >= 6) score += 1
+
+  if (onTimeRate !== null) score += 1
+  if (averageLeadTimeDays !== null) score += 1
+
+  if (score >= 4) return 'high' as const
+  if (score >= 2) return 'medium' as const
+  return 'low' as const
+}
+
 export function buildAssigneeInsights(
   issues: IssueListItem[],
   settings: DashboardThresholdSettings,
@@ -152,6 +234,17 @@ export function buildAssigneeInsights(
         tags.push(toTag('추가 관찰', 'neutral'))
       }
 
+      const behavior = classifyBehavior({
+        activeCount: activeIssues.length,
+        sampleIssueCount: assigneeIssues.length,
+        averageLeadTimeDays,
+        staleShare,
+        recentUpdateRate,
+        onTimeRate,
+        closedRecentlyCount: recentClosed.length,
+        overloadThreshold: settings.overloadThreshold,
+      })
+      const confidenceLevel = buildConfidenceLevel(assigneeIssues.length, onTimeRate, averageLeadTimeDays)
       const interpretation = buildInterpretation(tags.map((tag) => tag.label), activeIssues.length, staleShare, onTimeRate)
 
       return {
@@ -161,6 +254,12 @@ export function buildAssigneeInsights(
           name: named.get(assigneeId) ?? `담당자 ${assigneeId}`,
         },
         activeCount: activeIssues.length,
+        behaviorType: behavior.behaviorType,
+        behaviorLabel: behavior.behaviorLabel,
+        behaviorSummary: behavior.behaviorSummary,
+        recommendedAction: behavior.recommendedAction,
+        confidenceLevel,
+        sampleIssueCount: assigneeIssues.length,
         tendencyTags: tags.slice(0, 3),
         evidence: [
           toEvidence('평균 리드타임', averageLeadTimeDays === null ? '데이터 부족' : `${averageLeadTimeDays}일`),

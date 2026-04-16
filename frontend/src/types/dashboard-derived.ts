@@ -99,12 +99,32 @@ export interface HealthModel {
   weeklyFlow: WeeklyFlowPoint[]
 }
 
+export type TrendDirection = 'up' | 'down' | 'flat'
+
+export interface MetricTrendModel {
+  direction: TrendDirection
+  deltaLabel: string
+  comparisonLabel: string
+  tone: DashboardTone
+}
+
+export interface DecisionGuidanceModel {
+  rootCause: string
+  suggestedAction: string
+  owner: AssigneeFilter | null
+}
+
 export interface KpiCardModel {
   id: string
   label: string
   value: string
   note: string
   tone: DashboardTone
+  status: 'normal' | 'warning' | 'critical'
+  statusLabel: string
+  trend: MetricTrendModel
+  tooltip: string
+  guidance: DecisionGuidanceModel
   statusGroup?: string | null
   preset?: IssuePreset | null
 }
@@ -137,6 +157,9 @@ export interface ActionBucketModel {
   tone: DashboardTone
   issues: IssueListItem[]
   emptyLabel: string
+  rootCause: string
+  suggestedAction: string
+  owner: AssigneeFilter | null
 }
 
 export interface StableOperationalItem {
@@ -188,6 +211,12 @@ export interface AssigneeTendencyInsight {
   key: string
   assignee: AssigneeFilter
   activeCount: number
+  behaviorType: 'fast_unstable' | 'slow_stable' | 'high_activity_low_completion' | 'balanced_operator'
+  behaviorLabel: string
+  behaviorSummary: string
+  recommendedAction: string
+  confidenceLevel: 'high' | 'medium' | 'low'
+  sampleIssueCount: number
   tendencyTags: AssigneeTendencyTag[]
   evidence: AssigneeEvidenceMetric[]
   interpretation: string

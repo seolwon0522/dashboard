@@ -29,7 +29,7 @@ export default function ComparisonTrendChart({
   primaryLabel,
   secondaryLabel,
 }: Props) {
-  const chartHeight = 88
+  const chartHeight = 76 
   const chartWidth = 100
   const maxValue = Math.max(1, ...points.flatMap((point) => [point.primary, point.secondary]))
   const stepX = points.length > 1 ? chartWidth / (points.length - 1) : chartWidth
@@ -37,7 +37,7 @@ export default function ComparisonTrendChart({
   const secondaryPath = buildPolyline(points.map((point) => point.secondary), chartHeight, maxValue, stepX)
 
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm shadow-slate-200/20">
+    <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-4 shadow-sm shadow-slate-200/20">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-slate-950">{title}</div>
@@ -46,17 +46,17 @@ export default function ComparisonTrendChart({
         <div className="space-y-2 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-slate-900" />
-            {primaryLabel}
-          </div>
+            {primaryLabel}  
+          </div> /* 1.5em 간격을 유지하기 위해 슬래시 추가 *\/
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
             {secondaryLabel}
-          </div>
+          </div> 
         </div>
       </div>
 
-      <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-4">
-        <svg viewBox={`0 0 ${chartWidth} ${chartHeight + 8}`} className="h-36 w-full overflow-visible">
+      <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3">
+        <svg viewBox={`0 0 ${chartWidth} ${chartHeight + 8}`} className="h-32 w-full overflow-visible">
           {[0, 0.5, 1].map((ratio) => {
             const y = chartHeight - chartHeight * ratio
             return (

@@ -89,9 +89,14 @@ export default function ProjectSelectView({ connectionStatus, onOpenConnectionSe
 
   const previewProject = useMemo(() => {
     if (!filteredProjects.length) return null
-    if (!previewProjectId) return filteredProjects[0]
+    if (!previewProjectId) {
+      if (!normalizedSearch && recentProjects.length > 0) {
+        return recentProjects[0]
+      }
+      return filteredProjects[0]
+    }
     return filteredProjects.find((project) => project.id === previewProjectId) ?? filteredProjects[0]
-  }, [filteredProjects, previewProjectId])
+  }, [filteredProjects, normalizedSearch, previewProjectId, recentProjects])
 
   const topProject = sortedProjects[0] ?? null
   const warningProjects = sortedProjects.filter((project) => project.risk_level !== 'stable').length
@@ -208,6 +213,19 @@ export default function ProjectSelectView({ connectionStatus, onOpenConnectionSe
           <div className="rounded-[24px] border border-[#e6ebf1] bg-white p-6 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.18)]">
             <div className="text-sm font-semibold text-[#191f28]">빠르게 열기</div>
             <p className="mt-2 text-sm leading-6 text-[#4e5968]">프로젝트명이나 ID로 바로 찾고, 방금 보던 프로젝트는 아래에서 다시 열 수 있습니다.</p>
+
+            {recentProjects[0] ? (
+              <Link
+                href={`/dashboard/${encodeURIComponent(recentProjects[0].id)}`}
+                className="mt-5 flex items-center justify-between gap-3 rounded-[20px] border border-[#d6e8ff] bg-[#eef6ff] px-4 py-4 transition-colors hover:border-[#bcd9ff] hover:bg-white"
+              >
+                <div>
+                  <div className="text-xs font-semibold text-[#5b708b]">기본 이어보기</div>
+                  <div className="mt-1 text-base font-semibold text-[#191f28]">{recentProjects[0].name}</div>
+                </div>
+                <Badge tone={getRiskTone(recentProjects[0].risk_level)} size="md">최근 프로젝트</Badge>
+              </Link>
+            ) : null}
 
             <label className="mt-5 block">
               <span className="mb-2 block text-xs font-semibold text-[#8b95a1]">프로젝트 검색</span>
