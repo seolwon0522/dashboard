@@ -87,7 +87,7 @@ export default function HomeActionQueue({ projectId, model, settings }: Props) {
                     </div>
                     <div className="shrink-0 text-xs text-[#8b95a1]">{issue.updated_on ?? '업데이트 없음'}</div>
                   </div>
-
+                  
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {getIssueSignals(issue, settings).slice(0, 2).map((signal) => (
                       <Badge key={`${issue.id}-${signal.label}`} tone={signal.tone}>{signal.label}</Badge>

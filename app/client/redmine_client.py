@@ -222,6 +222,16 @@ class RedmineClient:
             absolute_url=True,
         )
 
+    async def fetch_html_page(self, path_or_url: str, absolute_url: bool = False) -> str:
+        response = await self._request(
+            "GET",
+            path_or_url,
+            connection=self._resolve_connection(),
+            follow_redirects=True,
+            absolute_url=absolute_url,
+        )
+        return response.text
+
     async def test_connection(self, connection: RedmineConfig | None = None) -> str | None:
         """연결 정보를 검증하고 현재 사용자 이름을 반환한다."""
         data = await self._get("/users/current.json", connection=connection)

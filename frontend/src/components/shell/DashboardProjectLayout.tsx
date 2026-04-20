@@ -15,7 +15,13 @@ import {
 import type { NumericSettingKey } from '@/components/settings/ThresholdSettingsForm'
 import ProjectSelect from '@/components/ProjectSelect'
 import useDashboardProjectData from '@/hooks/useDashboardProjectData'
-import { fetchProjects } from '@/lib/api'
+import {
+  downloadProjectWikiHtml,
+  fetchProjectWikiExportStatus,
+  fetchProjects,
+  startProjectWikiExport,
+  type WikiExportJobStatus,
+} from '@/lib/api'
 import {
   DASHBOARD_SETTINGS_STORAGE_KEY,
   MAX_RECENT_PROJECTS,
@@ -71,6 +77,9 @@ export default function DashboardProjectLayout({ projectId, children }: Props) {
   const [projects, setProjects] = useState<ProjectItem[]>([])
   const [settings, setSettings] = useState<DashboardThresholdSettings>(getPresetSettings('default'))
   const [settingsHydrated, setSettingsHydrated] = useState(false)
+  const [wikiExportError, setWikiExportError] = useState<string | null>(null)
+  const [wikiExportJob, setWikiExportJob] = useState<WikiExportJobStatus | null>(null)
+  const [isWikiExportStarting, setIsWikiExportStarting] = useState(false)
   const { summary, issueList, loading, error, lastSynced, refresh } = useDashboardProjectData(projectId)
 
   useEffect(() => {
@@ -177,6 +186,75 @@ export default function DashboardProjectLayout({ projectId, children }: Props) {
     { href: `/dashboard/${encodeURIComponent(projectId)}/settings`, label: DASHBOARD_NAV_LABEL.settings },
   ]
 
+  const handleWikiExport = useCallback(() => {
+    setWikiExportError(null)
+    setIsWikiExportStarting(true)
+    void (async () => {
+      try {
+        const job = await startProjectWikiExport(projectId)
+        setWikiExportJob(job)
+      } catch (err) {
+        setWikiExportError(err instanceof Error ? err.message : '위키 문서 내보내기에 실패했습니다.')
+      } finally {
+        setIsWikiExportStarting(false)
+      }
+    })()
+  }, [projectId])
+
+  useEffect(() => {
+    if (!wikiExportJob || wikiExportJob.state === 'completed' || wikiExportJob.state === 'failed') {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const next = await fetchProjectWikiExportStatus(wikiExportJob.id)
+          setWikiExportJob(next)
+        } catch (err) {
+          setWikiExportError(err instanceof Error ? err.message : '위키 export 상태를 불러오지 못했습니다.')
+        }
+      })()
+    }, 1500)
+
+    return () => window.clearInterval(timer)
+  }, [wikiExportJob])
+
+  useEffect(() => {
+    if (!wikiExportJob || wikiExportJob.state !== 'completed' || wikiExportJob.downloaded) {
+      return
+    }
+
+    void (async () => {
+      try {
+        await downloadProjectWikiHtml(wikiExportJob.id, projectId)
+        const next = await fetchProjectWikiExportStatus(wikiExportJob.id)
+        setWikiExportJob(next)
+      } catch (err) {
+        setWikiExportError(err instanceof Error ? err.message : '완료된 파일 다운로드에 실패했습니다.')
+      }
+    })()
+  }, [projectId, wikiExportJob])
+
+  useEffect(() => {
+    if (!wikiExportJob?.downloaded) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setWikiExportJob(null)
+      setWikiExportError(null)
+    }, 1200)
+
+    return () => window.clearTimeout(timer)
+  }, [wikiExportJob?.downloaded])
+
+  const wikiExportToneClass = wikiExportJob?.state === 'failed'
+    ? 'border-rose-200 bg-rose-50'
+    : wikiExportJob?.state === 'completed'
+      ? 'border-emerald-200 bg-emerald-50'
+      : 'border-sky-200 bg-sky-50'
+
   return (
     <DashboardProjectContext.Provider value={contextValue}>
       <div className="min-h-screen bg-[#f5f7fb] text-[#191f28]">
@@ -221,6 +299,16 @@ export default function DashboardProjectLayout({ projectId, children }: Props) {
                     />
                   </svg>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={handleWikiExport}
+                  disabled={isWikiExportStarting || wikiExportJob?.state === 'running' || wikiExportJob?.state === 'queued'}
+                  className="rounded-[10px] border border-[#e6ebf1] bg-white px-3 py-1.5 text-[13px] font-semibold text-[#4e5968] transition-colors hover:bg-[#f8fafc] hover:text-[#191f28] disabled:opacity-40"
+                  title="현재 프로젝트의 Redmine Wiki 문서를 단일 HTML로 다운로드"
+                >
+                  {isWikiExportStarting || wikiExportJob?.state === 'running' || wikiExportJob?.state === 'queued' ? '문서 내보내는 중...' : '문서 HTML 받기'}
+                </button>
               </div>
 
               <nav aria-label="프로젝트 화면 이동" className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none]">
@@ -245,6 +333,66 @@ export default function DashboardProjectLayout({ projectId, children }: Props) {
                   })}
                 </div>
               </nav>
+
+              {wikiExportError ? (
+                <div className="rounded-[12px] border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                  {wikiExportError}
+                </div>
+              ) : null}
+
+              {wikiExportJob ? (
+                <div className={['rounded-[14px] border px-3 py-3', wikiExportToneClass].join(' ')}>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-[#191f28]">문서 HTML 내보내기 현황</div>
+                      <div className="mt-1 text-xs text-[#4e5968]">
+                        {wikiExportJob.project_key} · {wikiExportJob.step}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-[#191f28]">{wikiExportJob.progress}%</div>
+                      <div className="mt-1 text-[11px] font-medium text-[#6b7684]">
+                        {wikiExportJob.state === 'completed'
+                          ? '다운로드 준비 완료'
+                          : wikiExportJob.state === 'failed'
+                            ? '작업 실패'
+                            : '작업 진행 중'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/80">
+                    <div
+                      className={[
+                        'h-full rounded-full transition-[width]',
+                        wikiExportJob.state === 'failed'
+                          ? 'bg-rose-500'
+                          : wikiExportJob.state === 'completed'
+                            ? 'bg-emerald-500'
+                            : 'bg-sky-500',
+                      ].join(' ')}
+                      style={{ width: `${wikiExportJob.progress}%` }}
+                    />
+                  </div>
+
+                  {wikiExportJob.error ? (
+                    <div className="mt-3 rounded-[10px] border border-rose-200 bg-white/70 px-3 py-2 text-xs font-medium text-rose-700">
+                      {wikiExportJob.error}
+                    </div>
+                  ) : null}
+
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-xs font-semibold text-[#4e5968]">최근 로그 보기</summary>
+                    <div className="mt-2 max-h-40 overflow-y-auto rounded-[12px] border border-white/80 bg-white/80 px-3 py-2">
+                      <div className="space-y-1 text-[11px] leading-5 text-[#4e5968]">
+                        {wikiExportJob.logs.map((line, index) => (
+                          <div key={`${wikiExportJob.id}-log-${index}`}>{line}</div>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              ) : null}
             </div>
           </div>
         </header>

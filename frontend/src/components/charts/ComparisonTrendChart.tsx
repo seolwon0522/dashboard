@@ -47,7 +47,7 @@ export default function ComparisonTrendChart({
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-slate-900" />
             {primaryLabel}  
-          </div> /* 1.5em 간격을 유지하기 위해 슬래시 추가 *\/
+          </div> 
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
             {secondaryLabel}

@@ -123,3 +123,62 @@ export async function deleteRedmineConnection(): Promise<RedmineConnectionDelete
     method: 'DELETE',
   })
 }
+
+export interface WikiExportJobStatus {
+  id: string
+  project_key: string
+  state: 'queued' | 'running' | 'completed' | 'failed'
+  progress: number
+  step: string
+  logs: string[]
+  error: string | null
+  created_at: string
+  updated_at: string
+  finished_at: string | null
+  download_ready: boolean
+  downloaded: boolean
+}
+
+export async function startProjectWikiExport(projectId: string): Promise<WikiExportJobStatus> {
+  return apiFetch(`/api/wiki-export/jobs?project_key=${encodeURIComponent(projectId)}`, {
+    method: 'POST',
+  })
+}
+
+export async function fetchProjectWikiExportStatus(jobId: string): Promise<WikiExportJobStatus> {
+  return apiFetch(`/api/wiki-export/jobs/${encodeURIComponent(jobId)}`)
+}
+
+export async function downloadProjectWikiHtml(jobId: string, fallbackProjectId: string): Promise<void> {
+  const res = await fetch(`/api/wiki-export/jobs/${encodeURIComponent(jobId)}/download`, {
+    method: 'GET',
+    cache: 'no-store',
+  })
+
+  if (!res.ok) {
+    let message = `API 오류 [${res.status}]: wiki-export`
+
+    try {
+      const data = await res.json() as { detail?: string; message?: string }
+      message = data.detail ?? data.message ?? message
+    } catch {
+      message = `API 오류 [${res.status}]: wiki-export`
+    }
+
+    throw new Error(message)
+  }
+
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const disposition = res.headers.get('content-disposition') ?? ''
+  const encodedFilename = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  const fallbackFilename = `${fallbackProjectId}-wiki-export.html`
+  const filename = encodedFilename ? decodeURIComponent(encodedFilename) : fallbackFilename
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(url)
+}
