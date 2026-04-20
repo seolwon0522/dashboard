@@ -27,8 +27,8 @@ from app.services.issue_service import IssueService
 from app.services.project_service import ProjectService
 from app.services.redmine_connection_service import RedmineConnectionService
 from app.services.wiki_export_jobs import ExportJobStore
+from app.services.wiki_export_service import WikiExportService
 from app.services.workload_service import WorkloadService
-from wikiexport.wiki_export_service import WikiExportService
 
 # 로깅 설정
 logging.basicConfig(

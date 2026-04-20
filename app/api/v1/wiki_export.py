@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 
 from app.services.wiki_export_jobs import ExportJob, ExportJobStore
-from wikiexport.wiki_export_service import WikiExportService
+from app.services.wiki_export_service import WikiExportService
 
 logger = logging.getLogger(__name__)
 
