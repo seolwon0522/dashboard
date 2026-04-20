@@ -140,17 +140,17 @@ export interface WikiExportJobStatus {
 }
 
 export async function startProjectWikiExport(projectId: string): Promise<WikiExportJobStatus> {
-  return apiFetch(`/api/wiki-export/jobs?project_key=${encodeURIComponent(projectId)}`, {
+  return apiFetch(`/api/v1/wiki-export/jobs?project_key=${encodeURIComponent(projectId)}`, {
     method: 'POST',
   })
 }
 
 export async function fetchProjectWikiExportStatus(jobId: string): Promise<WikiExportJobStatus> {
-  return apiFetch(`/api/wiki-export/jobs/${encodeURIComponent(jobId)}`)
+  return apiFetch(`/api/v1/wiki-export/jobs/${encodeURIComponent(jobId)}`)
 }
 
 export async function downloadProjectWikiHtml(jobId: string, fallbackProjectId: string): Promise<void> {
-  const res = await fetch(`/api/wiki-export/jobs/${encodeURIComponent(jobId)}/download`, {
+  const res = await fetch(`/api/v1/wiki-export/jobs/${encodeURIComponent(jobId)}/download`, {
     method: 'GET',
     cache: 'no-store',
   })

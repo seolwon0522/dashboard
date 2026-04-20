@@ -6,8 +6,10 @@ from fastapi import APIRouter
 
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.redmine import router as redmine_router
+from app.api.v1.wiki_export import router as wiki_export_router
 
 # v1 접두사를 가진 상위 라우터
 router = APIRouter(prefix="/api/v1")
 router.include_router(dashboard_router)
 router.include_router(redmine_router)
+router.include_router(wiki_export_router)

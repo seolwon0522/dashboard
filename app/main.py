@@ -26,7 +26,9 @@ from app.core.config import get_settings
 from app.services.issue_service import IssueService
 from app.services.project_service import ProjectService
 from app.services.redmine_connection_service import RedmineConnectionService
+from app.services.wiki_export_jobs import ExportJobStore
 from app.services.workload_service import WorkloadService
+from wikiexport.wiki_export_service import WikiExportService
 
 # 로깅 설정
 logging.basicConfig(
@@ -60,6 +62,8 @@ async def lifespan(app: FastAPI):
         client=redmine_client,
         cache=cache,
     )
+    app.state.wiki_export_service = WikiExportService(redmine_client)
+    app.state.export_job_store = ExportJobStore()
 
     # 서비스 객체 생성 → app.state에 저장
     app.state.issue_service = IssueService(client=redmine_client, cache=cache, settings=settings)
